@@ -123,3 +123,7 @@ input[type=range]{width:100%;accent-color:#8ad8ff;margin:9px 0 0}
  .map-toolbar{width:max-content;max-width:calc(100% - 20px)}
 }
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;animation-duration:.01ms!important;transition-duration:.01ms!important}}
+
+.region-label-container{border:0!important;background:none!important;pointer-events:none!important}
+.region-label{display:block;width:110px;text-align:center;color:#c7e1fa;font-size:10px;font-weight:750;text-shadow:0 2px 5px #021221,0 0 8px #031328;white-space:normal;line-height:1.15;letter-spacing:-.018em;pointer-events:none}
+@media(max-width:650px){.region-label{font-size:8px;width:110px}}
