@@ -12,7 +12,7 @@ const categoryColor={red:'#f04c69',yellow:'#eeb054',partial:'#eeb054',other:'#90
 const debounce=(callback,ms)=>{let timer;return (...args)=>{clearTimeout(timer);timer=setTimeout(()=>callback(...args),ms)}};
 const state={mode:'oblast',filter:'all',tab:'alerts',alerts:[],updatedAt:null,stale:false,ready:false,drawer:false,
   geo:{oblast:null,raion:null},layers:{oblast:null,raion:null},selected:null,showThreats:true,tiles:false,
-  notices:[],noticesStatus:'loading',showNotices:true,fetching:false,modeRequest:0};
+  noticeSources:[],notices:[],noticesStatus:'loading',showNotices:true,fetching:false,modeRequest:0};
 let toastTimer=null;
 const map=L.map('map',{zoomControl:false,attributionControl:true,preferCanvas:true,minZoom:5,maxZoom:12}).setView([48.65,31.45],6);
 L.control.zoom({position:'bottomright'}).addTo(map);
@@ -218,7 +218,27 @@ function renderPanel(){
  $('region-list').innerHTML=searched.slice(0,145).map(card).join('');
  bindCards($('region-list'));
  // Favorites can contain objects for either geographic layer, even if current layer differs.
- const favRegions=[...favorites].map(…524 tokens truncated…rmatClock(new Date(state.updatedAt))+' · '+duration(state.updatedAt)+' тому':'Оновлення очікується';
+ const favRegions=[...favorites].map(key=>knownRegions.get(key)).filter(Boolean);
+ $('favorite-list').innerHTML=favRegions.length?favRegions.map(card).join(''):'<p class="section-note">Натисніть на область чи район і додайте його в обране.</p>';
+ bindCards($('favorite-list'));
+}
+function updateCounts(){
+ const oblasts=state.geo.oblast?.features||[];
+ const count=oblasts.filter(f=>classifyRegion(state.alerts,regionFromFeature(f,'oblast'),'all').count>0).length;
+ $('oblast-count').textContent=state.ready?String(count):'—';
+ $('alert-count').textContent=state.ready?String(state.alerts.length):'—';
+ $('compact-events').textContent=state.ready?state.alerts.filter(a=>matchesFilter(a,state.filter)).length:'—';
+ $('active-filter').textContent=({all:'Усі повідомлення',air:'Повітряна тривога',drones:'Загроза БпЛА',missiles:'Ракетна загроза',artillery:'Обстріли'})[state.filter];
+}
+function updateDurations(){
+ for(const node of document.querySelectorAll('[data-duration]')){
+   const started=Number(node.dataset.duration);
+   node.textContent=Number.isFinite(started)?duration(started):'час невідомий';
+ }
+ const now=formatClock(new Date());
+ $('clock').textContent='КИЇВ · '+now;
+ if(state.ready&&Date.now()-Date.parse(state.updatedAt)>120000){state.stale=true;connectionStatus('stale','Застарілі дані')}
+ $('data-age').textContent=state.updatedAt?'Оновлено '+formatClock(new Date(state.updatedAt))+' · '+duration(state.updatedAt)+' тому':'Оновлення очікується';
  document.body.classList.toggle('data-stale',state.stale||!state.ready);
  if(state.notices.length)refreshNotices();
 }
@@ -289,7 +309,9 @@ function switchTab(tab){
 function refreshNotices(){
  noticeLayer.clearLayers();
  const active=state.notices.filter(n=>Date.parse(n.expiresAt)>Date.now());
- $('notice-source').textContent=state.noticesStatus==='live'?'Канали · '+active.length+' актуальних':state.noticesStatus==='disabled'?'Канали · не підключено':'Канали · недоступні';
+ const available=state.noticeSources.filter(s=>s.status==='available').length;
+ $('notice-source').textContent=state.noticesStatus==='live'||state.noticesStatus==='partial'?'Канали · '+active.length+' попереджень'+(state.noticeSources.length?' · '+available+'/'+state.noticeSources.length+' доступні':''):state.noticesStatus==='disabled'?'Канали · вимкнено':state.noticesStatus==='loading'?'Канали · перевірка…':'Канали · недоступні';
+ $('channel-sources').innerHTML=state.noticeSources.map(s=>'<div class="source-row"><a href="https://t.me/'+esc(s.id)+'" target="_blank" rel="noopener noreferrer">'+esc(s.title)+'</a><small>'+ (s.official?'Офіційне джерело':'Додатковий канал')+' · '+(s.status==='available'?'Публічна сторінка доступна':'Недоступний')+'</small></div>').join('');
  $('notice-list').innerHTML=active.length?active.map(n=>'<article class="notice-card"><b>'+esc(n.region)+'</b><p>'+esc(n.summary)+'</p><small>'+esc(n.source)+' · '+formatStart(new Date(n.publishedAt))+'</small><a target="_blank" rel="noopener noreferrer" href="'+esc(n.url)+'">Переглянути повідомлення ↗</a></article>').join(''):'<p class="section-note">Немає актуальних повідомлень із підключених каналів. Цей шар не змінює офіційні статуси тривог.</p>';
  if(!state.showNotices)return;
  // Outline the named administrative area; never derive a point or route from text.
@@ -302,12 +324,12 @@ function refreshNotices(){
 }
 async function fetchNotices(){
  try{
-  const response=await fetch('/api/notices',{cache:'no-store',signal:AbortSignal.timeout(10000)});
+  const response=await fetch('/api/notices',{cache:'no-store',signal:AbortSignal.timeout(22000)});
   if(!response.ok)throw Error('Notice source unavailable');
   const data=await response.json();
   if(!Array.isArray(data.notices))throw Error('Invalid notices');
-  state.notices=data.notices;state.noticesStatus=data.status;
- }catch{state.notices=[];state.noticesStatus='error'}
+  state.notices=data.notices;state.noticesStatus=data.status;state.noticeSources=Array.isArray(data.sources)?data.sources:[];
+ }catch{state.notices=[];state.noticesStatus='error';state.noticeSources=state.noticeSources.map(s=>({...s,status:'unavailable'}))}
  refreshNotices();
 }
 function initEvents(){

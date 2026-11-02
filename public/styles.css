@@ -150,3 +150,5 @@ input[type=range]{width:100%;accent-color:#8ad8ff;margin:9px 0 0}
 .detail-card{bottom:165px}
 @media(max-width:850px){.map-health{top:177px;left:10px;padding:9px 11px;font-size:10px;gap:5px;max-width:230px}.map-filters{left:10px;bottom:calc(114px + env(safe-area-inset-bottom))}.map-filters button{font-size:11px;padding:7px 9px;min-height:34px}.map-legend{left:10px;bottom:calc(51px + env(safe-area-inset-bottom));font-size:9px;gap:7px;max-width:calc(100% - 70px)}.detail-card{bottom:calc(165px + env(safe-area-inset-bottom));max-height:42dvh}.drawer-tabs button{font-size:10px}}
 @media(max-height:580px){.map-health{display:none}.detail-card{bottom:65px;max-height:65dvh}.map-filters{left:auto;right:65px;bottom:50px}.map-legend{display:none}}
+
+.sources-heading{font-size:15px;margin-top:20px}.source-row{padding:10px 0;border-top:1px solid #31526f;font-size:12px}.source-row small{display:block;color:#a4bdd6;margin-top:5px}

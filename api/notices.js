@@ -1,5 +1,7 @@
 import {regions} from '../public/regions.js';
 import {norm} from '../public/alert-logic.js';
+import {CHANNEL_SOURCES} from '../lib/channel-sources.js';
+import {collectChannels} from '../lib/telegram-notices.js';
 
 const regionNames=new Map(regions.map(([name])=>[norm(name),name]));
 // Public regional bulletins only. Unknown channels and expired records are discarded.
@@ -22,13 +24,28 @@ export function normalizeNotices(items,allowed,now=Date.now()){
   return [{source,region,summary,url:url.origin+url.pathname,publishedAt:new Date(published).toISOString(),expiresAt:new Date(expires).toISOString()}];
  });
 }
-let cached=null,pending=null;
+let cached=null,pending=null,publicCache=null,publicPending=null;
 export default async function handler(req,res){
  res.setHeader('Cache-Control','no-store');
  if(req.method!=='GET')return res.status(405).json({error:'Method not allowed'});
  const feed=process.env.CHANNEL_NOTICES_URL;
  const allowed=new Set((process.env.CHANNEL_ALLOWLIST||'').split(',').map(s=>s.trim().replace(/^@/,'').toLowerCase()).filter(s=>/^[a-z0-9_]{5,32}$/.test(s)));
- if(!feed||!allowed.size)return res.status(200).json({status:'disabled',notices:[]});
+ if(process.env.CHANNEL_NOTICES_MODE==='off')return res.status(200).json({status:'disabled',notices:[],sources:[]});
+ if(!feed){
+  const sources=process.env.CHANNEL_ALLOWLIST?CHANNEL_SOURCES.filter(source=>allowed.has(source.id)):CHANNEL_SOURCES;
+  if(!sources.length)return res.status(200).json({status:'disabled',notices:[],sources:[]});
+  const key=sources.map(source=>source.id).join(',');
+  if(!publicCache||publicCache.key!==key||Date.now()-publicCache.at>=60000){
+   if(!publicPending)publicPending=collectChannels(sources).then(data=>{publicCache={key,at:Date.now(),data}}).finally(()=>{publicPending=null});
+   await publicPending;
+   // Configuration changes while a previous request was running must not leak excluded sources.
+   if(publicCache.key!==key)return res.status(503).json({status:'error',notices:[],sources:[]});
+  }
+  const data=publicCache.data;
+  if(data.status!=='error')res.setHeader('Vercel-CDN-Cache-Control','public, s-maxage=30');
+  return res.status(200).json({...data,notices:normalizeNotices(data.notices,new Set(sources.map(source=>source.id)))});
+ }
+ if(!allowed.size)return res.status(503).json({status:'error',notices:[],error:'Configure CHANNEL_ALLOWLIST for external feed'});
  try{
   const url=new URL(feed);
   if(url.protocol!=='https:'||url.username||url.password)throw Error('HTTPS required');
