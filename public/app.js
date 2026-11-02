@@ -32,6 +32,15 @@ const settlementLabels=L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_
  pane:'settlementNames',attribution:'© OpenStreetMap contributors · © CARTO',maxZoom:18
 });
 let oblastOutline=null;
+let selectedOutline=null;
+function clearSelectedOutline(){if(selectedOutline){map.removeLayer(selectedOutline);selectedOutline=null}}
+function highlightRegion(region){
+ clearSelectedOutline();
+ const collection=state.geo[region.type];
+ const feature=collection?.features.find(f=>regionKey(regionFromFeature(f,region.type))===regionKey(region));
+ if(!feature)return;
+ selectedOutline=L.geoJSON(feature,{interactive:false,style:{color:'#ffffff',weight:3.5,opacity:1,fill:false,dashArray:'8 4'}}).addTo(map);
+}
 const threatLayer=L.layerGroup().addTo(map);
 const nameLayer=L.layerGroup().addTo(map);
 const noticeLayer=L.layerGroup().addTo(map);
@@ -133,6 +142,7 @@ async function switchMode(mode,first=false){
    const target=await loadBoundaries(mode);
    if(request!==state.modeRequest)return;
    state.mode=mode;
+   clearSelectedOutline();
    if(state.ready||!state.stale)show('map-error',false);
    for(const m of ['oblast','raion']){const layer=state.layers[m];if(layer&&map.hasLayer(layer))map.removeLayer(layer)}
    target.addTo(map);target.bringToFront();
@@ -174,6 +184,7 @@ function refreshLabels(){
    const info=regionData(region);
    const screen=map.latLngToContainerPoint(point),height=info.startedAt?32:20;
    const box={x:screen.x-width/2,y:screen.y+17,w:width,h:height};
+   if(small&&(box.x<8||box.x+box.w>map.getSize().x-8||box.y<105||box.y+box.h>map.getSize().y-145))return;
    if(placed.some(b=>box.x<b.x+b.w&&box.x+box.w>b.x&&box.y<b.y+b.h&&box.y+box.h>b.y))return;
    placed.push(box);
    const short=region.name.replace(/ область$/,'').replace(/ район$/,'').replace(/^Автономна Республіка /,'');
@@ -251,7 +262,7 @@ function renderDetail(){
  $('place-name').value=draft;
  if(typing){$('place-name').focus();$('place-name').setSelectionRange(caret,caret)}
  show('details',true);
- $('details-close').onclick=()=>{state.selected=null;show('details',false)};
+ $('details-close').onclick=()=>{state.selected=null;clearSelectedOutline();show('details',false)};
  $('details-star').onclick=()=>{favorites.has(key)?favorites.delete(key):favorites.add(key);saveFavorites();renderDetail();renderPanel();toast(favorites.has(key)?'Регіон додано в обране':'Регіон прибрано з обраного')};
  $('details-panel').onclick=()=>openDrawer('alerts');
  $('place-form').onsubmit=event=>{
@@ -265,6 +276,7 @@ function renderDetail(){
 }
 function openRegion(region){
  state.selected=region;
+ highlightRegion(region);
  renderDetail();
  closeDrawer();
 }
@@ -552,6 +564,7 @@ function initEvents(){
  if(state.tiles){tileLayer.addTo(map);tileLayer.bringToBack();settlementLabels.addTo(map);$('tiles-toggle').classList.add('on');$('tiles-toggle').setAttribute('aria-pressed','true')}
  $('notice-toggle').onclick=()=>{state.showNotices=!state.showNotices;$('notice-toggle').setAttribute('aria-pressed',String(state.showNotices));$('notice-toggle').classList.toggle('on',state.showNotices);refreshNotices()};
  $('refresh').onclick=()=>{fetchAlerts();fetchNotices()};
+ $('map-find').onclick=()=>openDrawer('regions');
  $('map-home').onclick=()=>{state.selected=null;show('details',false);fitUkraine()};
  $('map-locate').onclick=()=>map.locate({setView:true,maxZoom:9,enableHighAccuracy:false});
  map.on('locationerror',()=>toast('Не вдалося визначити місцеположення. Перевірте дозвіл браузера.'));
