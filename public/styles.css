@@ -11,3 +11,6 @@
 @media(max-width:360px){.connection span{display:none}.connection{padding:11px 8px}.map-filters button{min-width:51px;padding:6px 7px}.brand{gap:6px}.toolbar-chip{padding:6px}.map-toolbar{gap:2px}.segmented button{padding:6px 7px}}
 @media(max-height:520px){.map-health,.map-status{display:none}.map-filters{left:12px;transform:none;bottom:35px}.map-filters button{flex-direction:row;min-width:0;height:40px;font-size:10px}.map-filters svg{width:20px;height:20px}.map-legend{display:none}.detail-card{top:80px;bottom:auto;left:auto;right:65px;width:310px;max-height:calc(100dvh - 100px)}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;transition-duration:.01ms!important;animation-duration:.01ms!important}}
+
+/* Independent layers may all be enabled at once. */
+.filter-row button.on:not([data-filter="all"]){background:#b6f36b1a;border-color:#657b49;color:#e2f1d4}

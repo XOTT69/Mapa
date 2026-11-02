@@ -46,13 +46,13 @@
   <section class="map-health" aria-label="Стан даних">
     <b id="source-status" role="status">alerts.in.ua · очікуємо</b>
     <span id="data-age">Оновлення очікується</span>
-    <span><strong id="compact-events">—</strong> повідомлень · <span id="active-filter">Усі повідомлення</span></span>
+    <span><strong id="compact-events">—</strong> повідомлень · <span id="active-filter">Усі загрози разом</span></span>
 
   </section>
-  <nav class="map-filters filter-row" aria-label="Шари загроз">
+  <nav class="map-filters filter-row" aria-label="Незалежні шари значків загроз">
     <button data-filter="all" class="on" aria-pressed="true"><span data-ui-icon="all"></span><span>Усі</span></button><button data-filter="air" aria-pressed="false"><span data-ui-icon="air"></span><span>Тривога</span></button><button data-filter="drones" aria-pressed="false"><span data-ui-icon="drone"></span><span>БпЛА</span></button><button data-filter="missiles" aria-pressed="false"><span data-ui-icon="missile"></span><span>Ракети</span></button><button data-filter="artillery" aria-pressed="false"><span data-ui-icon="artillery"></span><span>Обстріли</span></button>
   </nav>
-  <div class="map-legend"><span><i class="lg-red"></i>Тривога</span><span><i class="lg-amber"></i>Частково / жовтий</span><span><i class="lg-blue"></i>Без повідомлень у фільтрі</span><span><i class="lg-channel"></i>Повідомлення каналу</span></div>
+  <div class="map-legend"><span><i class="lg-red"></i>Тривога</span><span><i class="lg-amber"></i>Частково / жовтий</span><span><i class="lg-blue"></i>Немає активних повідомлень</span><span><i class="lg-channel"></i>Повідомлення каналу</span></div>
   <div class="map-actions">
     <button id="map-home" aria-label="Показати всю Україну" title="Вся Україна" data-ui-icon="home"></button>
     <button id="map-locate" aria-label="Моє місцеположення" title="Моє місцеположення" data-ui-icon="location"></button>
@@ -84,14 +84,14 @@
   </section>
 
       <div id="tab-alerts" class="tab-panel">
-        <div class="filter-row" role="group" aria-label="Тип загрози">
+        <div class="filter-row" role="group" aria-label="Незалежні шари значків загроз">
           <button data-filter="all" class="on"><span data-ui-icon="all"></span><span>Усі</span></button>
           <button data-filter="air"><span data-ui-icon="air"></span><span>Тривога</span></button>
           <button data-filter="drones"><span data-ui-icon="drone"></span><span>БпЛА</span></button>
           <button data-filter="missiles"><span data-ui-icon="missile"></span><span>Ракети</span></button>
           <button data-filter="artillery"><span data-ui-icon="artillery"></span><span>Обстріли</span></button>
         </div>
-        <p class="section-note">Категорії БпЛА та ракет — повідомлення про <b>загрозу</b>, а не кількість чи координати цілей.</p>
+        <p class="section-note">Усі типи загроз показуються разом. Кнопка перемикає лише свій шар значків; інші значки, кольори тривог, таймери й список повідомлень залишаються. Значок — категорія регіонального попередження.</p>
         <div class="list-heading">АКТИВНІ ПОВІДОМЛЕННЯ <span id="list-timestamp">—</span></div>
         <div id="alert-list" class="region-list"></div>
       </div>
