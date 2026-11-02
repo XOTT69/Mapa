@@ -1,4 +1,4 @@
-const CACHE='mapa-atlas-v9';
+const CACHE='mapa-atlas-v10';
 const CORE=['/','/index.html','/app.js','/alert-logic.js','/regions.js','/styles.css','/manifest.webmanifest','/icon.svg','/ukraine-oblasts.geojson','/ukraine-raions.geojson'];
 const BORDERS=new Set(['/ukraine-oblasts.geojson','/ukraine-raions.geojson']);
 self.addEventListener('install',event=>{
