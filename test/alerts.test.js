@@ -29,3 +29,8 @@ test('renamed rayons match legacy API naming',()=>{
  assert.equal(norm('Красноградський район'),norm('Берестинський район'));
  assert.equal(norm('Сєвєродонецький район'),norm('Сіверськодонецький район'));
 });
+
+test('air-raid timer is not extended by an older artillery event',()=>{
+ const alerts=cleanAlerts([{location_title:'Київська область',location_type:'oblast',alert_type:'artillery_shelling',started_at:'2026-01-01T00:00:00Z'},{location_title:'Київська область',location_type:'oblast',alert_type:'air_raid',started_at:'2026-11-02T10:00:00Z'}]);
+ assert.equal(classifyRegion(alerts,{name:'Київська область',type:'oblast'}).startedAt,Date.parse('2026-11-02T10:00:00Z'));
+});

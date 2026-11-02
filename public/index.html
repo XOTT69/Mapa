@@ -3,33 +3,32 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#07172d">
+<meta name="theme-color" content="#15181f">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="MAPA UA">
 <meta name="description" content="MAPA UA — інтерактивна мапа повітряних тривог України за областями та районами з часом початку і категоріями загроз">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
-<link rel="preconnect" href="https://unpkg.com" crossorigin>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
 <link rel="stylesheet" href="/styles.css">
 <title>MAPA UA — Повітряні тривоги України</title>
 </head>
 <body>
 <div id="app">
   <div id="map" role="application" aria-label="Карта повітряних тривог України"></div>
-  <div class="star-layer" aria-hidden="true"></div>
-  <div class="map-grid" aria-hidden="true"></div>
+
+
   <header class="topbar">
     <a class="brand" href="/" aria-label="MAPA UA — головна">
-      <span class="brand-logo">⌁</span>
-      <span><b>MAPA<span class="brand-accent">UA</span></b><small>ПОВІТРЯНИЙ ПРОСТІР</small></span>
+      <span class="brand-logo" data-ui-icon="layers"></span>
+      <span><b>MAPA<span class="brand-accent">UA</span></b><small>КАРТА ТРИВОГ</small></span>
     </a>
     <div class="topbar-right">
       <span class="clock" id="clock">КИЇВ · --:--</span>
       <span class="connection is-loading" id="connection"><i></i><span>Завантаження</span></span>
-      <button type="button" class="icon-button refresh" id="refresh" aria-label="Оновити дані" title="Оновити">↻</button>
-      <button type="button" class="menu-button" id="menu-open" aria-controls="drawer" aria-expanded="false"><span>☰</span><b>Інформація</b></button>
+      <button type="button" class="icon-button refresh" id="refresh" aria-label="Оновити дані" title="Оновити" data-ui-icon="refresh"></button>
+      <button type="button" class="menu-button" id="menu-open" aria-label="Інформація" aria-controls="drawer" aria-expanded="false"><span data-ui-icon="menu"></span><b>Інформація</b></button>
     </div>
   </header>
   <nav class="map-toolbar" aria-label="Шари мапи">
@@ -38,31 +37,41 @@
       <button id="mode-raion" aria-pressed="false">Райони</button>
     </div>
     <div class="toolbar-divider"></div>
-    <button class="toolbar-chip on" id="threat-toggle" aria-pressed="true" title="Позначки категорій загроз">⚠ <span>Загрози</span></button>
-    <button class="toolbar-chip" id="demo-toggle" aria-pressed="false">✦ <span>Демо цілей</span></button>
-    <button class="toolbar-chip" id="tiles-toggle" aria-pressed="false">◫ <span>Підкладка</span></button>
+    <button class="toolbar-chip on" id="threat-toggle" aria-label="Показувати значки загроз" aria-pressed="true" title="Позначки категорій загроз"><span data-ui-icon="drone"></span><span>Загрози</span></button>
+    <button class="toolbar-chip on" id="notice-toggle" aria-label="Показувати повідомлення каналів" aria-pressed="true"><span data-ui-icon="layers"></span><span>Канали</span></button>
+    <button class="toolbar-chip" id="tiles-toggle" aria-label="Показувати підкладку карти" aria-pressed="false"><span data-ui-icon="home"></span><span>Підкладка</span></button>
   </nav>
-  <div class="map-status" id="map-status">Завантаження меж областей…</div>
-  <div class="demo-ribbon" id="demo-ribbon" hidden>✦ СИМУЛЯЦІЯ — цілі й маршрути вигадані, не є реальною обстановкою</div>
+  <div class="map-status" id="map-status" role="status">Завантаження карти…</div>
+  <div class="map-error" id="map-error" hidden role="alert"><b id="map-error-title">Дані недоступні</b><p id="map-error-text"></p><button id="map-retry" type="button">Спробувати ще раз</button></div>
+  <section class="map-health" aria-label="Стан даних">
+    <b id="source-status" role="status">alerts.in.ua · очікуємо</b>
+    <span id="data-age">Оновлення очікується</span>
+    <span><strong id="compact-events">—</strong> повідомлень · <span id="active-filter">Усі повідомлення</span></span>
+
+  </section>
+  <nav class="map-filters filter-row" aria-label="Шари загроз">
+    <button data-filter="all" class="on" aria-pressed="true"><span data-ui-icon="all"></span><span>Усі</span></button><button data-filter="air" aria-pressed="false"><span data-ui-icon="air"></span><span>Тривога</span></button><button data-filter="drones" aria-pressed="false"><span data-ui-icon="drone"></span><span>БпЛА</span></button><button data-filter="missiles" aria-pressed="false"><span data-ui-icon="missile"></span><span>Ракети</span></button><button data-filter="artillery" aria-pressed="false"><span data-ui-icon="artillery"></span><span>Обстріли</span></button>
+  </nav>
+  <div class="map-legend"><span><i class="lg-red"></i>Тривога</span><span><i class="lg-amber"></i>Частково / жовтий</span><span><i class="lg-blue"></i>Без повідомлень у фільтрі</span><span><i class="lg-channel"></i>Повідомлення каналу</span></div>
   <div class="map-actions">
-    <button id="map-home" aria-label="Показати всю Україну" title="Вся Україна">⌖</button>
-    <button id="map-locate" aria-label="Моє місцеположення" title="Моє місцеположення">◎</button>
+    <button id="map-home" aria-label="Показати всю Україну" title="Вся Україна" data-ui-icon="home"></button>
+    <button id="map-locate" aria-label="Моє місцеположення" title="Моє місцеположення" data-ui-icon="location"></button>
   </div>
-  
-  <div class="safe-notice">⚠ Мапа показує регіональні повідомлення, не точне розташування цілей. Дотримуйтеся офіційних сповіщень.</div>
+
+  <div class="safe-notice">Значки показують тип загрози в регіоні · Дотримуйтеся офіційних сповіщень</div>
   <section class="detail-card" id="details" hidden aria-live="polite"></section>
   <div class="drawer-backdrop" id="drawer-backdrop" hidden></div>
-  <aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title" aria-hidden="true">
+  <aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title" aria-hidden="true" inert>
     <div class="drawer-handle" aria-hidden="true"></div>
     <div class="drawer-header">
       <div><div class="eyebrow">MAPA UA · ІНФОРМАЦІЙНА ПАНЕЛЬ</div><h1 id="drawer-title">Повітряні тривоги</h1></div>
-      <button id="menu-close" class="icon-button" aria-label="Закрити панель">✕</button>
+      <button id="menu-close" class="icon-button" aria-label="Закрити панель" data-ui-icon="close"></button>
     </div>
     <div class="drawer-tabs" role="group" aria-label="Розділи">
       <button data-tab="alerts" class="on">Активні</button>
       <button data-tab="regions">Регіони</button>
       <button data-tab="favorites">★ Обрані</button>
-      <button data-tab="about">Про мапу</button>
+      <button data-tab="notices">Канали</button><button data-tab="about">Про мапу</button>
     </div>
     <div class="drawer-body">
 <section class="map-summary" aria-label="Поточна статистика">
@@ -76,11 +85,11 @@
 
       <div id="tab-alerts" class="tab-panel">
         <div class="filter-row" role="group" aria-label="Тип загрози">
-          <button data-filter="all" class="on">Усі</button>
-          <button data-filter="air">Тривога</button>
-          <button data-filter="drones">БпЛА</button>
-          <button data-filter="missiles">Ракети</button>
-          <button data-filter="artillery">Обстріли</button>
+          <button data-filter="all" class="on"><span data-ui-icon="all"></span><span>Усі</span></button>
+          <button data-filter="air"><span data-ui-icon="air"></span><span>Тривога</span></button>
+          <button data-filter="drones"><span data-ui-icon="drone"></span><span>БпЛА</span></button>
+          <button data-filter="missiles"><span data-ui-icon="missile"></span><span>Ракети</span></button>
+          <button data-filter="artillery"><span data-ui-icon="artillery"></span><span>Обстріли</span></button>
         </div>
         <p class="section-note">Категорії БпЛА та ракет — повідомлення про <b>загрозу</b>, а не кількість чи координати цілей.</p>
         <div class="list-heading">АКТИВНІ ПОВІДОМЛЕННЯ <span id="list-timestamp">—</span></div>
@@ -95,10 +104,11 @@
         <p class="section-note">Збережені регіони залишаються на цьому пристрої.</p>
         <div id="favorite-list" class="region-list"></div>
       </div>
+      <div id="tab-notices" class="tab-panel" hidden><p class="section-note">Регіональні повідомлення з визначених каналів. Контур позначає область повідомлення, а не зону прогнозованого руху.</p><div class="notice-status" id="notice-source" role="status">Перевірка каналів…</div><div id="notice-list"></div><h2 class="sources-heading">Джерела повідомлень</h2><p class="section-note">Доступність сторінки не підтверджує достовірність повідомлення. Додаткові канали не визначають офіційного статусу тривоги. Показуються лише явні регіональні оголошення; повідомлення про переміщення цілей пропускаються.</p><div id="channel-sources"></div></div>
       <div id="tab-about" class="tab-panel" hidden>
-        <div class="about-block"><h2>Як читати карту</h2><p>Червоний означає повідомлення про активну тривогу для всієї обраної адміністративної одиниці. Жовтий — попередню або часткову загрозу. Синій — відсутність активних повідомлень у доступній відповіді API; це не підтвердження безпеки.</p></div>
-        <div class="about-block"><h2>Позначки загроз</h2><p>Іконка «БпЛА» чи «Ракети» ставиться біля умовного центру області, коли джерело повідомляє про відповідний тип загрози. Вона не означає місцеперебування об’єкта.</p></div>
-        <div class="about-block"><h2>Демонстрація цілей</h2><p>Кнопка «Демо цілей» запускає лише вигадані маршрути, незалежні від реальних повідомлень. Усі маркери позначені «ДЕМО».</p><label class="input-label" for="demo-speed">Швидкість демонстраційної анімації <output id="demo-speed-value">1×</output></label><input type="range" min="1" max="4" step="1" value="1" id="demo-speed"></div>
+        <div class="about-block"><h2>Як читати карту</h2><p>Червоний означає повідомлення про активну тривогу для всієї обраної адміністративної одиниці. Жовтий — попередню або часткову загрозу. Сірий — відсутність активних повідомлень у доступній відповіді API; це не підтвердження безпеки.</p></div>
+        <div class="about-block"><h2>Позначки загроз</h2><p>Силует БпЛА, ракети або іншого типу загрози ставиться біля умовного центру області, коли джерело повідомляє про відповідний тип загрози. Вона не означає місцеперебування об’єкта.</p></div>
+        <div class="about-block"><h2>Межі доступних даних</h2><p>API надає регіони, час і категорії загроз. Координат цілей, напрямків руху та траєкторій у цьому джерелі немає. Повідомлення каналів показуються окремим пунктирним контуром області й не змінюють статус тривоги.</p></div>
         <div class="about-block"><h2>Джерела й оновлення</h2><p>Статуси: <a href="https://alerts.in.ua/" target="_blank" rel="noopener">alerts.in.ua ↗</a>. Географія: <a href="https://github.com/darmat1/ukraine-geo-data" target="_blank" rel="noopener">ukraine-geo-data ↗</a> та <a href="https://github.com/Astaryon/UA_geojson" target="_blank" rel="noopener">UA_geojson ↗</a>. Оновлення автоматично приблизно кожні 45 секунд.</p></div>
         <div class="about-block warning"><h2>Важливо для безпеки</h2><p>Дані можуть запізнюватися чи бути неповними. Навіть синій регіон може бути небезпечним. Застосунок не замінює сповіщень від ДСНС і Повітряних сил.</p></div>
       </div>
@@ -107,7 +117,7 @@
   </aside>
   <div id="toast" role="status" aria-live="polite"></div>
 </div>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="/vendor/leaflet/leaflet.js"></script>
 <script type="module" src="/app.js"></script>
 </body>
 </html>

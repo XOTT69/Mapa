@@ -1,11 +1,11 @@
 {
   "name": "mapa-ua",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "private": true,
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test"
+    "test": "node --check public/app.js && node --check public/map-icons.js && node --check public/sw.js && node --test"
   },
   "engines": {
     "node": "22.x"

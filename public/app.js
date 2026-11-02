@@ -1,3 +1,4 @@
+import {icon,threatSymbols,symbolsForFilter,SYMBOL_LABELS} from './map-icons.js';
 import {regions as oblastAnchors} from './regions.js';
 import {TYPES,THREATS,norm,validStart,duration,cleanAlerts,matchesFilter,classifyRegion,threatSummary} from './alert-logic.js';
 
@@ -8,21 +9,23 @@ const formatClock=date=>new Intl.DateTimeFormat('uk-UA',{timeZone:'Europe/Kyiv',
 const formatStart=date=>new Intl.DateTimeFormat('uk-UA',{timeZone:'Europe/Kyiv',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:false}).format(date);
 const typeLabel=alert=>TYPES[alert.alert_type]||'Інше повідомлення';
 const threatLabel=code=>THREATS[code]||'Загроза: '+code;
-const categoryColor={red:'#f04c69',yellow:'#eeb054',partial:'#eeb054',other:'#90a6e7',quiet:'#21496c'};
+const categoryColor={red:'#ce555d',yellow:'#bc9450',partial:'#bc9450',other:'#8277aa',quiet:'#343b47'};
 const debounce=(callback,ms)=>{let timer;return (...args)=>{clearTimeout(timer);timer=setTimeout(()=>callback(...args),ms)}};
 const state={mode:'oblast',filter:'all',tab:'alerts',alerts:[],updatedAt:null,stale:false,ready:false,drawer:false,
   geo:{oblast:null,raion:null},layers:{oblast:null,raion:null},selected:null,showThreats:true,tiles:false,
-  showDemo:false,demoSpeed:1,demoEpoch:null,demoFrame:null,demoMarkers:[],demoLayer:null};
+  noticeSources:[],notices:[],noticesStatus:'loading',showNotices:true,fetching:false,modeRequest:0};
 let toastTimer=null;
-const map=L.map('map',{zoomControl:false,attributionControl:true,preferCanvas:true,minZoom:5,maxZoom:12}).setView([48.65,31.45],6);
+if(!window.L){$('map-error').hidden=false;$('map-error-title').textContent='Карта не завантажилась';$('map-error-text').textContent='Перевірте з’єднання та спробуйте ще раз.';$('map-retry').onclick=()=>location.reload();throw Error('Map library unavailable')}
+const regionCache=new Map();
+const boundaryPending={};
+const map=L.map('map',{zoomControl:false,attributionControl:true,preferCanvas:true,minZoom:3,maxZoom:12,zoomSnap:.25}).setView([48.65,31.45],6);
 L.control.zoom({position:'bottomright'}).addTo(map);
 const tileLayer=L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
   attribution:'© OpenStreetMap contributors · © CARTO',maxZoom:18
 });
 const threatLayer=L.layerGroup().addTo(map);
 const nameLayer=L.layerGroup().addTo(map);
-const demoLayer=L.layerGroup();
-state.demoLayer=demoLayer;
+const noticeLayer=L.layerGroup().addTo(map);
 const anchorMap=new Map(oblastAnchors.map(([name,lat,lng])=>[norm(name),[lat,lng]]));
 const knownRegions=new Map();
 const favoriteKey='mapa-favorites-v2';
@@ -36,12 +39,27 @@ function regionFromFeature(feature,mode){
   const oblast=mode==='oblast'?name:String(feature.properties?.oblast||'');
   return {name,oblast,type:mode};
 }
-function regionData(region){return classifyRegion(state.alerts,region,state.filter)}
+function regionData(region){
+ const key=state.filter+'|'+regionKey(region);
+ if(!regionCache.has(key))regionCache.set(key,classifyRegion(state.alerts,region,state.filter));
+ return regionCache.get(key);
+}
+function fitUkraine(){
+ const layer=state.layers.oblast||state.layers[state.mode];
+ if(layer&&layer.getBounds().isValid())map.fitBounds(layer.getBounds(),{paddingTopLeft:[16,130],paddingBottomRight:[16,160],maxZoom:6.5});
+}
+function allRegions(){
+ const base=(state.geo[state.mode]?.features||[]).map(f=>regionFromFeature(f,state.mode));
+ if(state.mode==='oblast')for(const [name] of oblastAnchors.filter(([name])=>name.startsWith('м.'))){
+  const city={type:'oblast',name,oblast:name};knownRegions.set(regionKey(city),city);base.push(city);
+ }
+ return [...new Map(base.map(r=>[regionKey(r),r])).values()];
+}
 function statusLabel(severity){return ({red:'Активна тривога',yellow:'Жовтий рівень загрози',partial:'Часткова тривога',other:'Інше активне повідомлення',quiet:'Активних повідомлень не знайдено'})[severity]}
 function featureStyle(feature,mode){
  const stateFor=regionData(regionFromFeature(feature,mode));
- return {color:stateFor.severity==='quiet'?'#4e7a9e':'#b2d9ff',opacity:0.92,weight:map.getZoom()>7?1.55:1.15,
-   fillColor:categoryColor[stateFor.severity],fillOpacity:stateFor.severity==='quiet'?.76:.88};
+ return {color:stateFor.severity==='quiet'?'#647080':stateFor.severity==='partial'?'#e8c58a':'#eda9aa',opacity:.85,weight:map.getZoom()>7?1.25:.85,dashArray:stateFor.severity==='partial'?'3 3':null,
+   fillColor:categoryColor[stateFor.severity],fillOpacity:stateFor.severity==='quiet'?.9:.85};
 }
 function registerLayer(data,mode){
  if(data?.type!=='FeatureCollection'||!Array.isArray(data.features)||data.features.length<(mode==='oblast'?20:100))throw Error('Неповний GeoJSON');
@@ -52,7 +70,7 @@ function registerLayer(data,mode){
      const region=regionFromFeature(feature,mode);
      shape.bindTooltip(esc(region.name),{sticky:true,direction:'auto',className:'map-tooltip'});
      shape.on('click',()=>openRegion(region));
-     shape.on('mouseover',()=>shape.setStyle({color:'#f0faff',weight:2.4}));
+     shape.on('mouseover',()=>shape.setStyle({color:'#d4edbb',weight:2.4}));
      shape.on('mouseout',()=>shape.setStyle(featureStyle(feature,mode)));
    }
  });
@@ -60,97 +78,118 @@ function registerLayer(data,mode){
 }
 async function loadBoundaries(mode){
  if(state.layers[mode])return state.layers[mode];
+ if(boundaryPending[mode])return boundaryPending[mode];
+ boundaryPending[mode]=(async()=>{
  const file=mode==='oblast'?'/ukraine-oblasts.geojson':'/ukraine-raions.geojson';
- const response=await fetch(file,{cache:'force-cache'});
+ const response=await fetch(file,{cache:'force-cache',signal:AbortSignal.timeout(15000)});
  if(!response.ok)throw Error('GeoJSON: '+response.status);
  const data=await response.json();
  state.geo[mode]=data;
  state.layers[mode]=registerLayer(data,mode);
  return state.layers[mode];
+ })().finally(()=>{boundaryPending[mode]=null});
+ return boundaryPending[mode];
 }
 function recolor(){
+ regionCache.clear();
  const layer=state.layers[state.mode];if(!layer)return;
  layer.eachLayer(l=>l.setStyle(featureStyle(l.feature,state.mode)));
- refreshLabels();refreshThreatMarkers();
+ refreshLabels();refreshThreatMarkers();refreshNotices();
 }
 async function switchMode(mode,first=false){
  if(mode!=='oblast'&&mode!=='raion')return;
- state.mode=mode;
+ const request=++state.modeRequest;
  for(const m of ['oblast','raion']){$('mode-'+m).classList.toggle('on',m===mode);$('mode-'+m).setAttribute('aria-pressed',String(m===mode))}
  $('map-status').classList.remove('error');
  $('map-status').textContent=mode==='oblast'?'Завантаження областей…':'Завантаження 136 районів…';
  try{
    const target=await loadBoundaries(mode);
+   if(request!==state.modeRequest)return;
+   state.mode=mode;
+   if(state.ready||!state.stale)show('map-error',false);
    for(const m of ['oblast','raion']){const layer=state.layers[m];if(layer&&map.hasLayer(layer))map.removeLayer(layer)}
    target.addTo(map);target.bringToFront();
    $('map-status').textContent=(mode==='oblast'?'25 областей':'136 районів')+' · межі завантажено';
    recolor();
-   if(first){const bounds=target.getBounds();if(bounds.isValid())map.fitBounds(bounds,{padding:[35,35],maxZoom:7})}
+   if(first)fitUkraine();
+   updateCounts();
    renderPanel();
  }catch(error){
+   if(request!==state.modeRequest)return;
    console.error('Region geometry failed:',error);
    $('map-status').classList.add('error');
    $('map-status').textContent='Межі недоступні — перевірте з’єднання';
-   toast('Не вдалося завантажити межі. Спробуйте перемкнути шар.');
+   for(const m of ['oblast','raion']){$('mode-'+m).classList.toggle('on',m===state.mode);$('mode-'+m).setAttribute('aria-pressed',String(m===state.mode))}
+   if(!state.layers.oblast&&!state.layers.raion){show('map-error',true);$('map-error-title').textContent='Не вдалося завантажити карту';$('map-error-text').textContent='Межі регіонів тимчасово недоступні. Перевірте з’єднання.'}
+   else toast('Межі недоступні. Попередній шар залишається на карті.');
  }
+}
+function shortDuration(start){
+ const days=Math.floor((Date.now()-start)/86400000);
+ return days>0?days+' д':duration(start);
 }
 function refreshLabels(){
  nameLayer.clearLayers();
- const zoom=map.getZoom(),viewport=map.getBounds().pad(.12);
+ const zoom=map.getZoom(),viewport=map.getBounds().pad(.12),placed=[];
+ const small=window.innerWidth<700;
  function addLabel(region,point,width){
    const info=regionData(region);
+   const screen=map.latLngToContainerPoint(point),height=info.startedAt?32:20;
+   const box={x:screen.x-width/2,y:screen.y+17,w:width,h:height};
+   if(placed.some(b=>box.x<b.x+b.w&&box.x+box.w>b.x&&box.y<b.y+b.h&&box.y+box.h>b.y))return;
+   placed.push(box);
    const short=region.name.replace(/ область$/,'').replace(/ район$/,'').replace(/^Автономна Республіка /,'');
-   const time=info.startedAt?'<small data-duration="'+info.startedAt+'">'+duration(info.startedAt)+'</small>':'';
+   const time=info.startedAt?'<small data-short data-duration="'+info.startedAt+'">'+shortDuration(info.startedAt)+'</small>':'';
    const icon=L.divIcon({className:'region-label',html:'<div class="map-zone-label '+info.severity+'"><b>'+esc(short)+'</b>'+time+'</div>',
-    iconSize:[width,35],iconAnchor:[width/2,18]});
+    iconSize:[width,35],iconAnchor:[width/2,-17]});
    L.marker(point,{icon,interactive:false,keyboard:false,zIndexOffset:50}).addTo(nameLayer);
  }
- if(state.mode==='oblast'&&zoom>=6&&(window.innerWidth>=760||zoom>=7)){
+ if((state.mode==='oblast'||zoom<7)&&zoom>=4.5){
   for(const [name,lat,lng] of oblastAnchors){
-    if(name==='м. Київ'||name==='м. Севастополь')continue;
+    if(name==='м. Севастополь'&&zoom<7)continue;
     if(!viewport.contains([lat,lng]))continue;
-    addLabel({type:'oblast',name,oblast:name},[lat,lng],108);
+    addLabel({type:'oblast',name,oblast:name},[lat,lng],small?70:100);
   }
- }else if(state.mode==='raion'&&zoom>=8&&state.layers.raion){
+ }else if(state.mode==='raion'&&zoom>=7&&state.layers.raion){
   let count=0;
   state.layers.raion.eachLayer(shape=>{
     if(count>=70)return;
     const center=shape.getBounds().getCenter();
     if(!viewport.contains(center))return;
-    addLabel(regionFromFeature(shape.feature,'raion'),center,92);
+    addLabel(regionFromFeature(shape.feature,'raion'),center,small?70:92);
     count++;
   });
  }
 }
+function symbolMarkup(symbols){return '<div class="threat-symbols">'+symbols.map(name=>'<span class="threat-symbol '+name+'" role="img" aria-label="'+esc(SYMBOL_LABELS[name])+'">'+icon(name)+'</span>').join('')+'</div>'}
 function refreshThreatMarkers(){
  threatLayer.clearLayers();
  if(!state.showThreats||!state.ready)return;
- // Only regional categories from alerts.in.ua; these markers are NOT target positions.
- for(const [name,lat,lng] of oblastAnchors){
-   const region={type:'oblast',name,oblast:name};
-   const data=classifyRegion(state.alerts,region,state.filter);
-   if(!data.count)continue;
-   const threatTypes=threatSummary(data.alerts);
-   let category=null,icon=null;
-   if(threatTypes.includes('drones')){category='drone';icon='◇'}
-   else if(threatTypes.some(t=>t.includes('missiles'))){category='missile';icon='⌁'}
-   if(!category)continue;
-   const label=category==='drone'?'БпЛА':'Ракети';
-   const marker=L.marker([lat,lng],{zIndexOffset:260,icon:L.divIcon({
-      className:'threat-icon',html:'<div class="threat-bubble '+category+'">'+icon+' '+label+'</div>',
-      iconSize:[78,25],iconAnchor:[39,14]
-    })});
-   marker.bindTooltip('Регіональна загроза: '+label+'. Не координати цілі.');
-   marker.on('click',()=>openRegion(region));
-   marker.addTo(threatLayer);
+ const entries=[];
+ if(state.mode==='raion'&&map.getZoom()>=7&&state.layers.raion){
+  state.layers.raion.eachLayer(shape=>entries.push({region:regionFromFeature(shape.feature,'raion'),point:shape.getBounds().getCenter()}));
+ }else{
+  for(const [name,lat,lng] of oblastAnchors)entries.push({region:{type:'oblast',name,oblast:name},point:[lat,lng]});
+ }
+ for(const {region,point} of entries){
+  if(!map.getBounds().pad(.15).contains(point))continue;
+  const info=regionData(region),symbols=symbolsForFilter(info.alerts,state.filter);
+  if(!symbols.length)continue;
+  const labels=symbols.map(name=>SYMBOL_LABELS[name]).join(' · ');
+  const marker=L.marker(point,{title:region.name+': '+labels,alt:region.name+': '+labels,zIndexOffset:260,icon:L.divIcon({
+   className:'threat-icon',html:symbolMarkup(symbols),iconSize:[1,34],iconAnchor:[0,18]
+  })});
+  marker.bindTooltip(esc(region.name)+'<br>'+esc(labels)+'<br><small>Тип загрози в регіоні · умовне місце значка</small>');
+  marker.on('click',()=>openRegion(region));marker.addTo(threatLayer);
  }
 }
+
 function regionStart(data){return data.startedAt??null}
 function renderDetail(){
  if(!state.selected){show('details',false);return}
  const region=state.selected,info=regionData(region),key=regionKey(region),fav=favorites.has(key);
  const alertsSorted=[...info.alerts].sort((a,b)=>(validStart(a.started_at)||Infinity)-(validStart(b.started_at)||Infinity));
- const parent=region.type==='raion'?esc(region.oblast)+' · район':'Область';
+ const parent=region.type==='raion'?esc(region.oblast)+' · район':region.name.startsWith('м.')?'Місто':'Область';
  const inner=alertsSorted.slice(0,22).map(a=>{
    const codes=threatSummary([a]);
    const label=typeLabel(a);
@@ -161,9 +200,10 @@ function renderDetail(){
  }).join('');
  $('details').innerHTML='<div class="detail-header"><div><div class="eyebrow">'+parent+'</div><div class="detail-title">'+esc(region.name)+'</div></div>'+
     '<button class="detail-close" type="button" id="details-close" aria-label="Закрити">✕</button></div>'+
+    '<div class="detail-symbols">'+symbolMarkup(threatSymbols(info.alerts))+'</div>'+
     '<div class="detail-status"><i class="status-bullet '+info.severity+'"></i>'+esc(statusLabel(info.severity))+'</div>'+
     '<div class="detail-timer">'+(info.startedAt?'<span data-duration="'+info.startedAt+'">'+duration(info.startedAt)+'</span>':'—')+
-    '<small>'+(info.startedAt?'З '+formatStart(new Date(info.startedAt))+' · від найранішого активного повідомлення':'Час активної тривоги не встановлений')+'</small></div>'+
+    '<small>'+(info.startedAt?'З '+formatStart(new Date(info.startedAt))+' · '+(info.alerts.some(a=>a.alert_type==='air_raid')?'від початку активної повітряної тривоги':'від найранішого активного повідомлення'):'Час активної тривоги не встановлений')+'</small></div>'+
     (inner?'<div class="detail-sources">'+inner+'</div>':'<p class="section-note">У поточній відповіді API немає активних повідомлень для цієї території.</p>')+
     '<div class="detail-footer"><button class="small-btn" id="details-star" type="button">'+(fav?'★ Прибрати з обраного':'☆ В обране')+'</button>'+
     '<button class="small-btn" id="details-panel" type="button">☰ Інформація</button></div>'+
@@ -188,7 +228,8 @@ function focusFeature(region){
  if(!layer){openRegion(region);return}
  let found=null;
  layer.eachLayer(shape=>{const r=regionFromFeature(shape.feature,region.type);if(regionKey(r)===regionKey(region))found=shape});
- if(found&&found.getBounds().isValid())map.fitBounds(found.getBounds(),{padding:[50,50],maxZoom:9});
+ if(found&&found.getBounds().isValid())map.fitBounds(found.getBounds(),{paddingTopLeft:[25,140],paddingBottomRight:[25,170],maxZoom:9});
+ else if(anchorMap.has(norm(region.name)))map.setView(anchorMap.get(norm(region.name)),9);
  openRegion(region);
 }
 function card(region){
@@ -203,13 +244,12 @@ function bindCards(root){
  root.querySelectorAll('[data-region]').forEach(el=>el.onclick=()=>{const r=knownRegions.get(el.dataset.region);if(r)zoomToRegion(r)});
 }
 function renderPanel(){
- const base=(state.geo[state.mode]?.features||[]).map(f=>regionFromFeature(f,state.mode));
- const unique=[...new Map(base.map(r=>[regionKey(r),r])).values()];
+ const unique=allRegions();
  const active=unique.filter(r=>regionData(r).count>0).sort((a,b)=>{
    const left=regionData(a),right=regionData(b);
    return right.count-left.count||a.name.localeCompare(b.name,'uk');
  });
- $('alert-list').innerHTML=active.length?active.map(card).join(''):'<p class="section-note">'+(state.ready?'Немає активних повідомлень для цього фільтра.':'Дані тривог завантажуються…')+'</p>';
+ $('alert-list').innerHTML=active.length?active.map(card).join(''):'<p class="section-note">'+(state.ready?'Немає активних повідомлень для цього фільтра.':state.stale?'Дані тривог недоступні. Спробуйте оновити.':'Дані тривог завантажуються…')+'</p>';
  bindCards($('alert-list'));
  const q=norm($('region-search').value);
  const searched=unique.filter(r=>!q||norm(r.name).includes(q)||norm(r.oblast).includes(q)).sort((a,b)=>a.name.localeCompare(b.name,'uk'));
@@ -225,22 +265,31 @@ function updateCounts(){
  const count=oblasts.filter(f=>classifyRegion(state.alerts,regionFromFeature(f,'oblast'),'all').count>0).length;
  $('oblast-count').textContent=state.ready?String(count):'—';
  $('alert-count').textContent=state.ready?String(state.alerts.length):'—';
+ $('compact-events').textContent=state.ready?state.alerts.filter(a=>matchesFilter(a,state.filter)).length:'—';
+ $('active-filter').textContent=({all:'Усі повідомлення',air:'Повітряна тривога',drones:'Загроза БпЛА',missiles:'Ракетна загроза',artillery:'Обстріли'})[state.filter];
 }
 function updateDurations(){
  for(const node of document.querySelectorAll('[data-duration]')){
    const started=Number(node.dataset.duration);
-   node.textContent=Number.isFinite(started)?duration(started):'час невідомий';
+   node.textContent=Number.isFinite(started)?node.hasAttribute('data-short')?shortDuration(started):duration(started):'час невідомий';
  }
  const now=formatClock(new Date());
  $('clock').textContent='КИЇВ · '+now;
+ if(state.ready&&Date.now()-Date.parse(state.updatedAt)>120000){state.stale=true;connectionStatus('stale','Застарілі дані')}
+ $('data-age').textContent=state.updatedAt?'Оновлено '+formatClock(new Date(state.updatedAt))+' · '+duration(state.updatedAt)+' тому':'Оновлення очікується';
+ document.body.classList.toggle('data-stale',state.stale||!state.ready);
+ if(state.notices.length)refreshNotices();
 }
 function connectionStatus(kind,text){
  const el=$('connection');
  el.className='connection is-'+kind;
  el.querySelector('span').textContent=text;
  $('footer-status').textContent=text;
+ $('source-status').textContent='alerts.in.ua · '+text;
 }
 async function fetchAlerts(){
+ if(state.fetching)return;
+ state.fetching=true;
  $('refresh').disabled=true;
  try{
    const controller=new AbortController();
@@ -249,12 +298,15 @@ async function fetchAlerts(){
    try{response=await fetch('/api/alerts',{cache:'no-store',signal:controller.signal})}finally{clearTimeout(timeout)}
    const payload=await response.json();
    if(!response.ok)throw new Error(payload.error||'HTTP '+response.status);
-   const items=cleanAlerts(payload.alerts);
+   const raw=Array.isArray(payload.alerts)?payload.alerts:payload.alerts?.alerts;
+   if(!Array.isArray(raw)||!Number.isFinite(Date.parse(payload.updatedAt)))throw Error('Некоректний формат відповіді');
+   const items=cleanAlerts(raw);
    state.alerts=items;
    state.updatedAt=payload.updatedAt||new Date().toISOString();
    state.stale=Boolean(payload.stale)||Date.now()-Date.parse(state.updatedAt)>120000;
    state.ready=true;
    connectionStatus(state.stale?'stale':'live',state.stale?'Застарілі дані':'Онлайн');
+   if(state.layers.oblast||state.layers.raion)show('map-error',false);
    $('sync-time').textContent=formatClock(new Date(state.updatedAt));
    $('list-timestamp').textContent='Оновлено '+formatClock(new Date(state.updatedAt));
    updateCounts();recolor();renderPanel();renderDetail();updateDurations();
@@ -263,21 +315,26 @@ async function fetchAlerts(){
    state.stale=true;
    connectionStatus('error',state.ready?'Зв’язок втрачено':'Немає даних');
    $('sync-time').textContent=state.updatedAt?'Останні: '+formatClock(new Date(state.updatedAt)):'Немає даних';
-   if(!state.ready){$('oblast-count').textContent='—';$('alert-count').textContent='—'}
- }finally{$('refresh').disabled=false}
+   if(!state.ready){$('oblast-count').textContent='—';$('alert-count').textContent='—';renderPanel();show('map-error',true);$('map-error-title').textContent='Немає актуальних даних';$('map-error-text').textContent='Статуси тривог тимчасово недоступні. Географія карти працює, але її кольори зараз не відображають актуальну обстановку.'}
+ }finally{state.fetching=false;$('refresh').disabled=false;updateDurations()}
 }
 function openDrawer(tab=state.tab){
  state.drawer=true;
+ $('drawer').inert=false;
  $('drawer').classList.add('open');
  $('drawer').setAttribute('aria-hidden','false');
  $('menu-open').setAttribute('aria-expanded','true');
  show('drawer-backdrop',true);
  switchTab(tab);
+ $('menu-close').focus();
 }
+
 function closeDrawer(){
  if(!state.drawer)return;
  state.drawer=false;
+ $('drawer').inert=true;
  $('drawer').classList.remove('open');
+ $('menu-open').focus();
  $('drawer').setAttribute('aria-hidden','true');
  $('menu-open').setAttribute('aria-expanded','false');
  show('drawer-backdrop',false);
@@ -285,51 +342,38 @@ function closeDrawer(){
 function switchTab(tab){
  state.tab=tab;
  for(const button of document.querySelectorAll('[data-tab]'))button.classList.toggle('on',button.dataset.tab===tab);
- for(const name of ['alerts','regions','favorites','about'])show('tab-'+name,name===tab);
+ for(const name of ['alerts','regions','favorites','about','notices'])show('tab-'+name,name===tab);
  if(tab==='regions')$('region-search').focus();
 }
-const demoRoutes=[
- [[48.18,26.22],[48.75,27.45],[49.14,28.12],[49.00,29.12]],
- [[47.45,33.00],[48.10,32.40],[48.58,31.60],[48.44,30.85]],
- [[50.42,34.00],[49.88,33.62],[49.38,33.05],[49.00,32.22]]
-];
-function interpolate(route,progress){
- const index=Math.floor(progress),fraction=progress-index;
- const p1=route[index],p2=route[Math.min(index+1,route.length-1)];
- return [p1[0]+fraction*(p2[0]-p1[0]),p1[1]+fraction*(p2[1]-p1[1])];
-}
-function animateDemo(timestamp){
- if(!state.showDemo||document.hidden||window.matchMedia('(prefers-reduced-motion: reduce)').matches)return;
- if(state.demoEpoch===null)state.demoEpoch=timestamp;
- const step=(timestamp-state.demoEpoch)/16000*state.demoSpeed;
- demoRoutes.forEach((route,i)=>{
-   const progress=(step+i*.6)%(route.length-1);
-   state.demoMarkers[i]?.setLatLng(interpolate(route,progress));
- });
- state.demoFrame=requestAnimationFrame(animateDemo);
-}
-function toggleDemo(){
- state.showDemo=!state.showDemo;
- $('demo-toggle').classList.toggle('on',state.showDemo);
- $('demo-toggle').setAttribute('aria-pressed',String(state.showDemo));
- show('demo-ribbon',state.showDemo);
- if(state.demoFrame!==null)cancelAnimationFrame(state.demoFrame);
- state.demoFrame=null;state.demoEpoch=null;
- if(!state.showDemo){demoLayer.remove();return}
- if(!state.demoMarkers.length){
-   for(const route of demoRoutes){
-     L.polyline(route,{color:'#c7a1ff',weight:2,dashArray:'6 10',opacity:.8,interactive:false}).addTo(demoLayer);
-     const marker=L.marker(route[0],{interactive:false,zIndexOffset:500,icon:L.divIcon({
-       className:'demo-icon',html:'<div class="demo-object">◇<small>ДЕМО</small></div>',
-       iconSize:[42,40],iconAnchor:[21,20]
-     })}).addTo(demoLayer);
-     state.demoMarkers.push(marker);
-   }
+function refreshNotices(){
+ noticeLayer.clearLayers();
+ const active=state.notices.filter(n=>Date.parse(n.expiresAt)>Date.now());
+ const available=state.noticeSources.filter(s=>s.status==='available').length;
+ $('notice-source').textContent=state.noticesStatus==='live'||state.noticesStatus==='partial'?'Канали · '+active.length+' попереджень'+(state.noticeSources.length?' · '+available+'/'+state.noticeSources.length+' доступні':''):state.noticesStatus==='disabled'?'Канали · вимкнено':state.noticesStatus==='loading'?'Канали · перевірка…':'Канали · недоступні';
+ $('channel-sources').innerHTML=state.noticeSources.map(s=>'<div class="source-row"><a href="https://t.me/'+esc(s.id)+'" target="_blank" rel="noopener noreferrer">'+esc(s.title)+'</a><small>'+ (s.official?'Офіційне джерело':'Додатковий канал')+' · '+(s.status==='available'?'Публічна сторінка доступна':'Недоступний')+'</small></div>').join('');
+ $('notice-list').innerHTML=active.length?active.map(n=>'<article class="notice-card"><b>'+esc(n.region)+'</b><p>'+esc(n.summary)+'</p><small>'+esc(n.source)+' · '+formatStart(new Date(n.publishedAt))+'</small><a target="_blank" rel="noopener noreferrer" href="'+esc(n.url)+'">Переглянути повідомлення ↗</a></article>').join(''):'<p class="section-note">Немає актуальних повідомлень із підключених каналів. Цей шар не змінює офіційні статуси тривог.</p>';
+ if(!state.showNotices)return;
+ // Outline the named administrative area; never derive a point or route from text.
+ for(const feature of state.geo[state.mode]?.features||[]){
+   const region=regionFromFeature(feature,state.mode);
+   const notices=active.filter(n=>norm(n.region)===norm(region.oblast));
+   if(!notices.length)continue;
+   L.geoJSON(feature,{interactive:false,style:{color:'#a9a0ff',weight:3,dashArray:'7 6',fill:false}}).addTo(noticeLayer);
  }
- demoLayer.addTo(map);
- if(!document.hidden){state.demoFrame=requestAnimationFrame(animateDemo)}
+}
+async function fetchNotices(){
+ try{
+  const response=await fetch('/api/notices',{cache:'no-store',signal:AbortSignal.timeout(22000)});
+  if(!response.ok)throw Error('Notice source unavailable');
+  const data=await response.json();
+  if(!Array.isArray(data.notices))throw Error('Invalid notices');
+  state.notices=data.notices;state.noticesStatus=data.status;state.noticeSources=Array.isArray(data.sources)?data.sources:[];
+ }catch{state.notices=[];state.noticesStatus='error';state.noticeSources=state.noticeSources.map(s=>({...s,status:'unavailable'}))}
+ refreshNotices();
 }
 function initEvents(){
+ document.querySelectorAll('[data-ui-icon]').forEach(el=>el.innerHTML=icon(el.dataset.uiIcon));
+ $('map-retry').onclick=()=>{switchMode(state.mode,!state.layers[state.mode]);fetchAlerts();fetchNotices()};
  $('menu-open').onclick=()=>openDrawer('alerts');
  $('menu-close').onclick=closeDrawer;
  $('drawer-backdrop').onclick=closeDrawer;
@@ -348,38 +392,35 @@ function initEvents(){
    if(state.tiles){tileLayer.addTo(map);tileLayer.bringToBack()}
    else map.removeLayer(tileLayer);
  };
- $('demo-toggle').onclick=toggleDemo;
- $('demo-speed').oninput=event=>{$('demo-speed-value').textContent=event.target.value+'×';state.demoSpeed=Number(event.target.value);state.demoEpoch=null};
- $('refresh').onclick=fetchAlerts;
- $('map-home').onclick=()=>{
-   const layer=state.layers[state.mode];
-   if(layer&&layer.getBounds().isValid())map.fitBounds(layer.getBounds(),{padding:[28,28],maxZoom:7});
-   else map.setView([48.65,31.45],6);
- };
+ $('notice-toggle').onclick=()=>{state.showNotices=!state.showNotices;$('notice-toggle').setAttribute('aria-pressed',String(state.showNotices));$('notice-toggle').classList.toggle('on',state.showNotices);refreshNotices()};
+ $('refresh').onclick=()=>{fetchAlerts();fetchNotices()};
+ $('map-home').onclick=()=>{state.selected=null;show('details',false);fitUkraine()};
  $('map-locate').onclick=()=>map.locate({setView:true,maxZoom:9,enableHighAccuracy:false});
  map.on('locationerror',()=>toast('Не вдалося визначити місцеположення. Перевірте дозвіл браузера.'));
- map.on('zoomend',()=>{refreshLabels();const layer=state.layers[state.mode];if(layer)layer.eachLayer(l=>l.setStyle({weight:map.getZoom()>7?1.55:1.15}))});
+ map.on('zoomend',()=>{refreshLabels();refreshThreatMarkers();const layer=state.layers[state.mode];if(layer)layer.eachLayer(l=>l.setStyle({weight:map.getZoom()>7?1.25:.85}))});
+ map.on('moveend',()=>{refreshLabels();refreshThreatMarkers()});
+ map.on('resize',()=>{if(!state.selected)fitUkraine()});
  document.querySelectorAll('[data-tab]').forEach(button=>button.onclick=()=>switchTab(button.dataset.tab));
  document.querySelectorAll('[data-filter]').forEach(button=>button.onclick=()=>{
    state.filter=button.dataset.filter;
-   document.querySelectorAll('[data-filter]').forEach(b=>b.classList.toggle('on',b===button));
-   recolor();renderPanel();renderDetail();
+   document.querySelectorAll('[data-filter]').forEach(b=>{const on=b.dataset.filter===state.filter;b.classList.toggle('on',on);b.setAttribute('aria-pressed',String(on))});
+   updateCounts();recolor();renderPanel();renderDetail();
  });
  $('region-search').oninput=debounce(renderPanel,120);
- document.addEventListener('visibilitychange',()=>{
-   if(document.hidden){
-     if(state.demoFrame!==null)cancelAnimationFrame(state.demoFrame);
-     state.demoFrame=null;
-   }else{
-     if(state.showDemo){state.demoEpoch=null;state.demoFrame=requestAnimationFrame(animateDemo)}
-     fetchAlerts();
-   }
+ document.addEventListener('visibilitychange',()=>{if(!document.hidden){fetchAlerts();fetchNotices()}});
+ $('drawer').addEventListener('keydown',event=>{
+  if(event.key!=='Tab')return;
+  const nodes=[...$('drawer').querySelectorAll('button,input,a[href]')].filter(n=>n.getClientRects().length);
+  const first=nodes[0],last=nodes.at(-1);
+  if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus()}
+  else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus()}
  });
 }
 initEvents();
 switchMode('oblast',true);
 fetchAlerts();
+fetchNotices();
 updateDurations();
 setInterval(updateDurations,15000);
-setInterval(()=>{if(!document.hidden)fetchAlerts()},45000);
+setInterval(()=>{if(!document.hidden){fetchAlerts();fetchNotices()}},45000);
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(error=>console.warn('PWA:',error));
