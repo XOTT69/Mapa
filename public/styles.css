@@ -134,3 +134,9 @@ input[type=range]{width:100%;accent-color:#8ad8ff;margin:9px 0 0}
 .map-zone-label.red{color:#ffedf1}.map-zone-label.red small{color:#ffd2dc}
 .map-zone-label.yellow,.map-zone-label.partial{color:#ffe0b3}
 @media(max-width:750px){.map-zone-label b{font-size:9px}.map-zone-label small{font-size:8px}}
+
+/* Map-first navigation: analytics live only inside the information drawer. */
+.drawer .map-summary{position:relative;z-index:auto;left:auto;right:auto;bottom:auto;width:100%;max-width:none;margin:0 0 17px;padding:12px;border-radius:14px;border:1px solid #2e5c7d;background:linear-gradient(145deg,#102a46,#0b223a);box-shadow:none;backdrop-filter:none}
+.drawer .summary-values{margin:10px 0}.drawer .summary-values strong{font-size:27px}
+.drawer .legend{gap:9px;padding-top:9px}
+@media(max-width:850px){.drawer .map-summary{width:100%;max-width:none;left:auto;bottom:auto;margin:0 0 13px}.drawer .summary-values strong{font-size:25px}}
