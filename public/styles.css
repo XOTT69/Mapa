@@ -127,3 +127,10 @@ input[type=range]{width:100%;accent-color:#8ad8ff;margin:9px 0 0}
 .region-label-container{border:0!important;background:none!important;pointer-events:none!important}
 .region-label{display:block;width:110px;text-align:center;color:#c7e1fa;font-size:10px;font-weight:750;text-shadow:0 2px 5px #021221,0 0 8px #031328;white-space:normal;line-height:1.15;letter-spacing:-.018em;pointer-events:none}
 @media(max-width:650px){.region-label{font-size:8px;width:110px}}
+
+.map-zone-label{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:1px;width:110px;min-width:90px;text-align:center;color:#c6e3fc;text-shadow:0 1px 7px #051527,0 0 8px #051527;pointer-events:none}
+.map-zone-label b{font-size:10px;line-height:1.1;font-weight:800;white-space:normal}
+.map-zone-label small{display:block;font-size:9px;line-height:1.15;color:#ffd7a4;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
+.map-zone-label.red{color:#ffedf1}.map-zone-label.red small{color:#ffd2dc}
+.map-zone-label.yellow,.map-zone-label.partial{color:#ffe0b3}
+@media(max-width:750px){.map-zone-label b{font-size:9px}.map-zone-label small{font-size:8px}}
