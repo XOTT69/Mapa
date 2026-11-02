@@ -48,14 +48,7 @@
     <button id="map-home" aria-label="Показати всю Україну" title="Вся Україна">⌖</button>
     <button id="map-locate" aria-label="Моє місцеположення" title="Моє місцеположення">◎</button>
   </div>
-  <section class="map-summary" aria-label="Поточна статистика">
-    <div class="summary-title"><span class="status-dot"></span> ПОВІТРЯНА ОБСТАНОВКА <span id="sync-time">—</span></div>
-    <div class="summary-values">
-      <div><strong id="oblast-count">—</strong><small>областей із повідомленнями</small></div>
-      <div><strong id="alert-count">—</strong><small>активних повідомлень</small></div>
-    </div>
-    <div class="legend"><span><i class="lg-red"></i>Тривога</span><span><i class="lg-amber"></i>Частково / жовтий</span><span><i class="lg-blue"></i>Немає повідомлень</span></div>
-  </section>
+  
   <div class="safe-notice">⚠ Мапа показує регіональні повідомлення, не точне розташування цілей. Дотримуйтеся офіційних сповіщень.</div>
   <section class="detail-card" id="details" hidden aria-live="polite"></section>
   <div class="drawer-backdrop" id="drawer-backdrop" hidden></div>
@@ -72,6 +65,15 @@
       <button data-tab="about">Про мапу</button>
     </div>
     <div class="drawer-body">
+<section class="map-summary" aria-label="Поточна статистика">
+    <div class="summary-title"><span class="status-dot"></span> ПОВІТРЯНА ОБСТАНОВКА <span id="sync-time">—</span></div>
+    <div class="summary-values">
+      <div><strong id="oblast-count">—</strong><small>областей із повідомленнями</small></div>
+      <div><strong id="alert-count">—</strong><small>активних повідомлень</small></div>
+    </div>
+    <div class="legend"><span><i class="lg-red"></i>Тривога</span><span><i class="lg-amber"></i>Частково / жовтий</span><span><i class="lg-blue"></i>Немає повідомлень</span></div>
+  </section>
+
       <div id="tab-alerts" class="tab-panel">
         <div class="filter-row" role="group" aria-label="Тип загрози">
           <button data-filter="all" class="on">Усі</button>
