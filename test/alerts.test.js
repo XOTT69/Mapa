@@ -22,3 +22,10 @@ test('durations calculated from start time',()=>{
  assert.equal(duration('2026-11-02T08:00:00Z',Date.parse('2026-11-02T09:25:00Z')),'1 год 25 хв');
  assert.equal(duration(null),'час невідомий');
 });
+
+test('renamed rayons match legacy API naming',()=>{
+ assert.equal(norm('Новомосковський район'),norm('Самарівський район'));
+ assert.equal(norm('Червоноградський район'),norm('Шептицький район'));
+ assert.equal(norm('Красноградський район'),norm('Берестинський район'));
+ assert.equal(norm('Сєвєродонецький район'),norm('Сіверськодонецький район'));
+});
