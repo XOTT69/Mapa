@@ -1,1 +1,20 @@
-{"name":"MAPA UA — Повітряні тривоги","short_name":"MAPA UA","start_url":"/","display":"standalone","background_color":"#0b1324","theme_color":"#0b1324","lang":"uk"}
+{
+  "name": "MAPA UA — карта повітряних тривог",
+  "short_name": "MAPA UA",
+  "description": "Інтерактивна регіональна карта тривог України з областями, районами та таймерами",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "lang": "uk",
+  "background_color": "#07172d",
+  "theme_color": "#07172d",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

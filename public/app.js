@@ -110,7 +110,7 @@ function refreshThreatMarkers(){
  // Only regional categories from alerts.in.ua; these markers are NOT target positions.
  for(const [name,lat,lng] of oblastAnchors){
    const region={type:'oblast',name,oblast:name};
-   const data=classifyRegion(state.alerts,region,'all');
+   const data=classifyRegion(state.alerts,region,state.filter);
    if(!data.count)continue;
    const threatTypes=threatSummary(data.alerts);
    let category=null,icon=null;
@@ -234,7 +234,7 @@ async function fetchAlerts(){
    const items=cleanAlerts(payload.alerts);
    state.alerts=items;
    state.updatedAt=payload.updatedAt||new Date().toISOString();
-   state.stale=Boolean(payload.stale);
+   state.stale=Boolean(payload.stale)||Date.now()-Date.parse(state.updatedAt)>120000;
    state.ready=true;
    connectionStatus(state.stale?'stale':'live',state.stale?'Застарілі дані':'Онлайн');
    $('sync-time').textContent=formatClock(new Date(state.updatedAt));
@@ -243,7 +243,7 @@ async function fetchAlerts(){
  }catch(error){
    console.error('alerts API error:',error);
    state.stale=true;
-   connectionStatus('error','Немає даних');
+   connectionStatus('error',state.ready?'Зв’язок втрачено':'Немає даних');
    $('sync-time').textContent=state.updatedAt?'Останні: '+formatClock(new Date(state.updatedAt)):'Немає даних';
    if(!state.ready){$('oblast-count').textContent='—';$('alert-count').textContent='—'}
  }finally{$('refresh').disabled=false}
