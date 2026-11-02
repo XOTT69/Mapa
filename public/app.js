@@ -1,5 +1,6 @@
 import {readUserData,upsertPlace,newPlaceId,placeTransitions,USER_STORAGE_KEY} from './user-features.js';
 import {icon,threatSymbols,visibleThreatSymbols,toggleSymbolLayer,SYMBOL_LAYERS,SYMBOL_LABELS} from './map-icons.js';
+import {initThreats} from './threats-layer.js';
 import {regions as oblastAnchors} from './regions.js';
 import {TYPES,THREATS,norm,validStart,duration,cleanAlerts,classifyRegion,threatSummary} from './alert-logic.js';
 
@@ -13,7 +14,7 @@ const threatLabel=code=>THREATS[code]||'Загроза: '+code;
 const categoryColor={red:'#ce555d',yellow:'#bc9450',partial:'#bc9450',other:'#8277aa',quiet:'#343b47'};
 const debounce=(callback,ms)=>{let timer;return (...args)=>{clearTimeout(timer);timer=setTimeout(()=>callback(...args),ms)}};
 const state={mode:'oblast',hiddenSymbols:new Set(),tab:'alerts',alerts:[],updatedAt:null,stale:false,ready:false,drawer:false,
-  geo:{oblast:null,raion:null},layers:{oblast:null,raion:null},selected:null,showThreats:true,tiles:false,
+  geo:{oblast:null,raion:null},layers:{oblast:null,raion:null},selected:null,showThreats:true,tiles:true,showShaheds:true,
   noticeSources:[],notices:[],noticesStatus:'loading',showNotices:true,fetching:false,modeRequest:0};
 let toastTimer=null;
 if(!window.L){$('map-error').hidden=false;$('map-error-title').textContent='Карта не завантажилась';$('map-error-text').textContent='Перевірте з’єднання та спробуйте ще раз.';$('map-retry').onclick=()=>location.reload();throw Error('Map library unavailable')}
@@ -27,6 +28,12 @@ const tileLayer=L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/
 const threatLayer=L.layerGroup().addTo(map);
 const nameLayer=L.layerGroup().addTo(map);
 const noticeLayer=L.layerGroup().addTo(map);
+const shahed=initThreats(map,{onUpdate:({total,unknown,shown,tracks,error,stale})=>{
+ state.shahedTracks=tracks||[];state.shahedError=error||(stale?'дані застарілі':null);renderShahedFeed();
+ const badge=$('shahed-count');if(!badge)return;
+ badge.textContent=shown?'~'+total+(unknown?'+':''):'0';
+ const chip=$('shahed-toggle');if(chip)chip.title=(shown?'Орієнтовно ~'+total+(unknown?'+':'')+' БпЛА, '+shown+' напрямків':'Шахедів у каналах не видно')+' · за повідомленнями каналів, не радар'+(error?' · '+error:stale?' · дані застарілі':'');
+}});
 const anchorMap=new Map(oblastAnchors.map(([name,lat,lng])=>[norm(name),[lat,lng]]));
 const knownRegions=new Map();
 const favoriteKey='mapa-favorites-v2';
@@ -64,9 +71,15 @@ function statusLabel(severity){return ({red:'Активна тривога',yell
 function featureStyle(feature,mode){
  const stateFor=regionData(regionFromFeature(feature,mode));
  const light=resolvedTheme()==='light';
- const palette=light?{red:'#e48991',yellow:'#e4c17e',partial:'#e4c17e',other:'#bcb0d1',quiet:'#d6dce5'}:categoryColor;
- return {color:stateFor.severity==='quiet'?(light?'#96a2b3':'#647080'):stateFor.severity==='partial'?(light?'#8d681f':'#e8c58a'):(light?'#a34c56':'#eda9aa'),opacity:.85,weight:map.getZoom()>7?1.25:.85,dashArray:stateFor.severity==='partial'?'3 3':null,
-   fillColor:palette[stateFor.severity],fillOpacity:stateFor.severity==='quiet'?.9:.85};
+ // Як на офіційних мапах тривог: спокійні області майже прозорі (видно підкладку), тривоги — виразна заливка
+ const look=light?{
+  red:['#e5262e','#c21d25',.40,1.6],yellow:['#f0a000','#b87800',.34,1.4],partial:['#f0a000','#b87800',.30,1.4],other:['#7c6cf0','#5a4bd0',.28,1.2],quiet:['#6b7686','#8d99ab',.04,.8]
+ }:{
+  red:['#ff3b3b','#ff7a7a',.46,1.6],yellow:['#ffb020','#ffd27a',.36,1.4],partial:['#ffb020','#ffd27a',.30,1.4],other:['#9b8cff','#c3baff',.30,1.2],quiet:['#8a94a6','#6b7686',.05,.8]
+ };
+ const [fill,stroke,fillOpacity,weight]=look[stateFor.severity]||look.quiet;
+ const zoomBoost=map.getZoom()>7?.25:0;
+ return {color:stroke,opacity:stateFor.severity==='quiet'?.7:.95,weight:weight+zoomBoost,dashArray:stateFor.severity==='partial'?'4 4':null,fillColor:fill,fillOpacity};
 }
 function registerLayer(data,mode){
  if(data?.type!=='FeatureCollection'||!Array.isArray(data.features)||data.features.length<(mode==='oblast'?20:100))throw Error('Неповний GeoJSON');
@@ -367,8 +380,19 @@ function closeDrawer(){
 function switchTab(tab){
  state.tab=tab;
  for(const button of document.querySelectorAll('[data-tab]'))button.classList.toggle('on',button.dataset.tab===tab);
- for(const name of ['alerts','regions','favorites','about','notices','settings'])show('tab-'+name,name===tab);
+ for(const name of ['alerts','shaheds','regions','favorites','about','notices','settings'])show('tab-'+name,name===tab);
  if(tab==='regions')$('region-search').focus();
+}
+function renderShahedFeed(){
+ const box=$('shahed-list');if(!box)return;
+ const list=state.shahedTracks||[];
+ const conf={high:'вища',medium:'середня',low:'низька'};
+ $('shahed-summary').textContent=list.length?list.reduce((n,t)=>n+t.count,0)+(list.some(t=>!t.countKnown)?'+':'')+' БпЛА · '+list.length+' напрямків':'Немає';
+ box.innerHTML=list.length?list.map(t=>{
+  const route=[t.origin?.name,t.at?.name,t.target?.name].filter(Boolean).filter((v,i,a)=>a.indexOf(v)===i).join(' → ');
+  const mins=Math.max(0,Math.round((Date.now()-t.ts)/60000));
+  return '<button type="button" class="shahed-card '+(t.confidence==='low'?'low':'')+'" data-id="'+esc(t.id)+'"><b>'+(t.countKnown?esc(t.count)+' ':'? ')+'БпЛА · '+esc(route||'без назви')+'</b><small>'+mins+' хв тому · точність: '+(conf[t.confidence]||'—')+' · '+esc((t.sources||[t.source]).slice(0,2).join(', '))+'</small></button>';
+ }).join(''):'<p class="section-note">'+(state.shahedError?'Немає даних каналів ('+esc(state.shahedError)+').':'За останні 40 хвилин у каналах не знайдено повідомлень про рух БпЛА. Це не означає безпеки — дивіться офіційні сповіщення.')+'</p>';
 }
 function refreshNotices(){
  noticeLayer.clearLayers();
@@ -497,6 +521,15 @@ function initEvents(){
    if(state.tiles){tileLayer.addTo(map);tileLayer.bringToBack()}
    else map.removeLayer(tileLayer);
  };
+ $('shahed-list').onclick=e=>{const b=e.target.closest('[data-id]');if(!b)return;closeDrawer();shahed.focus(b.dataset.id)};
+ $('map-feed').onclick=()=>openDrawer('shaheds');
+ $('shahed-toggle').onclick=()=>{
+   state.showShaheds=!state.showShaheds;
+   $('shahed-toggle').classList.toggle('on',state.showShaheds);
+   $('shahed-toggle').setAttribute('aria-pressed',String(state.showShaheds));
+   shahed.setVisible(state.showShaheds);
+ };
+ if(state.tiles){tileLayer.addTo(map);tileLayer.bringToBack();$('tiles-toggle').classList.add('on');$('tiles-toggle').setAttribute('aria-pressed','true')}
  $('notice-toggle').onclick=()=>{state.showNotices=!state.showNotices;$('notice-toggle').setAttribute('aria-pressed',String(state.showNotices));$('notice-toggle').classList.toggle('on',state.showNotices);refreshNotices()};
  $('refresh').onclick=()=>{fetchAlerts();fetchNotices()};
  $('map-home').onclick=()=>{state.selected=null;show('details',false);fitUkraine()};
