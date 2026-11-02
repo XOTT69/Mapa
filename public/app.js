@@ -22,9 +22,16 @@ const regionCache=new Map();
 const boundaryPending={};
 const map=L.map('map',{zoomControl:false,attributionControl:true,preferCanvas:true,minZoom:3,maxZoom:12,zoomSnap:.25}).setView([48.65,31.45],6);
 L.control.zoom({position:'bottomright'}).addTo(map);
-const tileLayer=L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
+const tileLayer=L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',{
   attribution:'© OpenStreetMap contributors · © CARTO',maxZoom:18
 });
+map.createPane('settlementNames');
+map.getPane('settlementNames').style.zIndex='450';
+map.getPane('settlementNames').style.pointerEvents='none';
+const settlementLabels=L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png',{
+ pane:'settlementNames',attribution:'© OpenStreetMap contributors · © CARTO',maxZoom:18
+});
+let oblastOutline=null;
 const threatLayer=L.layerGroup().addTo(map);
 const nameLayer=L.layerGroup().addTo(map);
 const noticeLayer=L.layerGroup().addTo(map);
@@ -129,6 +136,17 @@ async function switchMode(mode,first=false){
    if(state.ready||!state.stale)show('map-error',false);
    for(const m of ['oblast','raion']){const layer=state.layers[m];if(layer&&map.hasLayer(layer))map.removeLayer(layer)}
    target.addTo(map);target.bringToFront();
+   if(oblastOutline&&map.hasLayer(oblastOutline))map.removeLayer(oblastOutline);
+   if(mode==='raion'){
+     try{
+       await loadBoundaries('oblast');
+       if(request!==state.modeRequest)return;
+       oblastOutline=L.geoJSON(state.geo.oblast,{
+         interactive:false,
+         style:{color:resolvedTheme()==='light'?'#405b76':'#d9e5f3',weight:2.3,opacity:.95,fill:false}
+       }).addTo(map);
+     }catch(err){console.warn('Oblast outlines unavailable; keeping district layer',err)}
+   }
    $('map-status').textContent=(mode==='oblast'?'25 областей':'136 районів')+' · межі завантажено';
    recolor();
    if(first)fitUkraine();
@@ -428,7 +446,9 @@ function applyTheme(){
  const light=resolvedTheme()==='light';
  document.documentElement.dataset.theme=light?'light':'dark';
  document.querySelector('meta[name="theme-color"]').content=light?'#f4f6fa':'#15181f';
- tileLayer.setUrl('https://{s}.basemaps.cartocdn.com/'+(light?'light_all':'dark_all')+'/{z}/{x}/{y}{r}.png');
+ tileLayer.setUrl('https://{s}.basemaps.cartocdn.com/'+(light?'light_nolabels':'dark_nolabels')+'/{z}/{x}/{y}{r}.png');
+ settlementLabels.setUrl('https://{s}.basemaps.cartocdn.com/'+(light?'light_only_labels':'dark_only_labels')+'/{z}/{x}/{y}{r}.png');
+ if(oblastOutline)oblastOutline.setStyle({color:light?'#405b76':'#d9e5f3'});
  recolor();
 }
 function renderPlaces(){
@@ -518,8 +538,8 @@ function initEvents(){
    state.tiles=!state.tiles;
    $('tiles-toggle').classList.toggle('on',state.tiles);
    $('tiles-toggle').setAttribute('aria-pressed',String(state.tiles));
-   if(state.tiles){tileLayer.addTo(map);tileLayer.bringToBack()}
-   else map.removeLayer(tileLayer);
+   if(state.tiles){tileLayer.addTo(map);tileLayer.bringToBack();settlementLabels.addTo(map)}
+   else {map.removeLayer(tileLayer);map.removeLayer(settlementLabels)}
  };
  $('shahed-list').onclick=e=>{const b=e.target.closest('[data-id]');if(!b)return;closeDrawer();shahed.focus(b.dataset.id)};
  $('map-feed').onclick=()=>openDrawer('shaheds');
@@ -529,7 +549,7 @@ function initEvents(){
    $('shahed-toggle').setAttribute('aria-pressed',String(state.showShaheds));
    shahed.setVisible(state.showShaheds);
  };
- if(state.tiles){tileLayer.addTo(map);tileLayer.bringToBack();$('tiles-toggle').classList.add('on');$('tiles-toggle').setAttribute('aria-pressed','true')}
+ if(state.tiles){tileLayer.addTo(map);tileLayer.bringToBack();settlementLabels.addTo(map);$('tiles-toggle').classList.add('on');$('tiles-toggle').setAttribute('aria-pressed','true')}
  $('notice-toggle').onclick=()=>{state.showNotices=!state.showNotices;$('notice-toggle').setAttribute('aria-pressed',String(state.showNotices));$('notice-toggle').classList.toggle('on',state.showNotices);refreshNotices()};
  $('refresh').onclick=()=>{fetchAlerts();fetchNotices()};
  $('map-home').onclick=()=>{state.selected=null;show('details',false);fitUkraine()};
