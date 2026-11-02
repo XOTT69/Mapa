@@ -1,11 +1,10 @@
-'use strict';
 // GET /api/threats -> { updated, tracks: [...], sources: [...] }
 // Env: THREAT_CHANNELS="chan1,chan2,..." (імена публічних TG-каналів без @), THREAT_TTL_MIN (за замовч. 40)
-const { collectThreats } = require('../lib/threats');
+import { collectThreats } from '../lib/threats.js';
 
 const clean = (s) => s.trim().replace(/^https?:\/\/t\.me\/(?:s\/)?/i, '').replace(/^@/, '').split(/[/?#]/)[0];
 
-module.exports = async function handler(req, res) {
+export default async function handler(req, res) {
   const channels = (process.env.THREAT_CHANNELS || '').split(',').map(clean).filter(Boolean).slice(0, 25);
   const send = (code, body) => {
     res.statusCode = code;
@@ -20,4 +19,4 @@ module.exports = async function handler(req, res) {
   } catch (e) {
     send(502, { updated: Date.now(), tracks: [], sources: [], error: 'Не вдалося отримати дані каналів' });
   }
-};
+}
