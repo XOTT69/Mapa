@@ -38,7 +38,14 @@ export function threatSymbols(alerts){
  return [...symbols];
 }
 
-export function symbolsForFilter(alerts,filter='all'){
- const symbols=threatSymbols(alerts),single={drones:'drone',missiles:'missile',artillery:'artillery'}[filter];
- return single?symbols.filter(symbol=>symbol===single):symbols;
+export const SYMBOL_LAYERS=Object.freeze({air:'air',drones:'drone',missiles:'missile',artillery:'artillery'});
+export function visibleThreatSymbols(alerts,hidden=new Set()){
+ return threatSymbols(alerts).filter(symbol=>!hidden.has(symbol));
+}
+export function toggleSymbolLayer(hidden,layer){
+ const next=new Set(hidden);
+ if(layer==='all')return new Set();
+ const symbol=SYMBOL_LAYERS[layer];
+ if(symbol){if(next.has(symbol))next.delete(symbol);else next.add(symbol)}
+ return next;
 }

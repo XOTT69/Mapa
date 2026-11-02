@@ -1,6 +1,6 @@
-import {icon,threatSymbols,symbolsForFilter,SYMBOL_LABELS} from './map-icons.js';
+import {icon,threatSymbols,visibleThreatSymbols,toggleSymbolLayer,SYMBOL_LAYERS,SYMBOL_LABELS} from './map-icons.js';
 import {regions as oblastAnchors} from './regions.js';
-import {TYPES,THREATS,norm,validStart,duration,cleanAlerts,matchesFilter,classifyRegion,threatSummary} from './alert-logic.js';
+import {TYPES,THREATS,norm,validStart,duration,cleanAlerts,classifyRegion,threatSummary} from './alert-logic.js';
 
 const $=id=>document.getElementById(id);
 const esc=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
@@ -11,7 +11,7 @@ const typeLabel=alert=>TYPES[alert.alert_type]||'Інше повідомленн
 const threatLabel=code=>THREATS[code]||'Загроза: '+code;
 const categoryColor={red:'#ce555d',yellow:'#bc9450',partial:'#bc9450',other:'#8277aa',quiet:'#343b47'};
 const debounce=(callback,ms)=>{let timer;return (...args)=>{clearTimeout(timer);timer=setTimeout(()=>callback(...args),ms)}};
-const state={mode:'oblast',filter:'all',tab:'alerts',alerts:[],updatedAt:null,stale:false,ready:false,drawer:false,
+const state={mode:'oblast',hiddenSymbols:new Set(),tab:'alerts',alerts:[],updatedAt:null,stale:false,ready:false,drawer:false,
   geo:{oblast:null,raion:null},layers:{oblast:null,raion:null},selected:null,showThreats:true,tiles:false,
   noticeSources:[],notices:[],noticesStatus:'loading',showNotices:true,fetching:false,modeRequest:0};
 let toastTimer=null;
@@ -40,8 +40,8 @@ function regionFromFeature(feature,mode){
   return {name,oblast,type:mode};
 }
 function regionData(region){
- const key=state.filter+'|'+regionKey(region);
- if(!regionCache.has(key))regionCache.set(key,classifyRegion(state.alerts,region,state.filter));
+ const key=regionKey(region);
+ if(!regionCache.has(key))regionCache.set(key,classifyRegion(state.alerts,region));
  return regionCache.get(key);
 }
 function fitUkraine(){
@@ -173,7 +173,7 @@ function refreshThreatMarkers(){
  }
  for(const {region,point} of entries){
   if(!map.getBounds().pad(.15).contains(point))continue;
-  const info=regionData(region),symbols=symbolsForFilter(info.alerts,state.filter);
+  const info=regionData(region),symbols=visibleThreatSymbols(info.alerts,state.hiddenSymbols);
   if(!symbols.length)continue;
   const labels=symbols.map(name=>SYMBOL_LABELS[name]).join(' · ');
   const marker=L.marker(point,{title:region.name+': '+labels,alt:region.name+': '+labels,zIndexOffset:260,icon:L.divIcon({
@@ -265,8 +265,8 @@ function updateCounts(){
  const count=oblasts.filter(f=>classifyRegion(state.alerts,regionFromFeature(f,'oblast'),'all').count>0).length;
  $('oblast-count').textContent=state.ready?String(count):'—';
  $('alert-count').textContent=state.ready?String(state.alerts.length):'—';
- $('compact-events').textContent=state.ready?state.alerts.filter(a=>matchesFilter(a,state.filter)).length:'—';
- $('active-filter').textContent=({all:'Усі повідомлення',air:'Повітряна тривога',drones:'Загроза БпЛА',missiles:'Ракетна загроза',artillery:'Обстріли'})[state.filter];
+ $('compact-events').textContent=state.ready?state.alerts.length:'—';
+ $('active-filter').textContent=state.hiddenSymbols.size?'Шари значків: '+(Object.keys(SYMBOL_LABELS).length-state.hiddenSymbols.size)+'/'+Object.keys(SYMBOL_LABELS).length:'Усі загрози разом';
 }
 function updateDurations(){
  for(const node of document.querySelectorAll('[data-duration]')){
@@ -371,6 +371,14 @@ async function fetchNotices(){
  }catch{state.notices=[];state.noticesStatus='error';state.noticeSources=state.noticeSources.map(s=>({...s,status:'unavailable'}))}
  refreshNotices();
 }
+function syncLayerControls(){
+ for(const button of document.querySelectorAll('[data-filter]')){
+  const layer=button.dataset.filter;
+  const on=layer==='all'?state.hiddenSymbols.size===0:!state.hiddenSymbols.has(SYMBOL_LAYERS[layer]);
+  button.classList.toggle('on',on);button.setAttribute('aria-pressed',String(on));
+  button.title=layer==='all'?'Показати всі типи загроз':(on?'Приховати':'Показати')+' лише ці значки';
+ }
+}
 function initEvents(){
  document.querySelectorAll('[data-ui-icon]').forEach(el=>el.innerHTML=icon(el.dataset.uiIcon));
  $('map-retry').onclick=()=>{switchMode(state.mode,!state.layers[state.mode]);fetchAlerts();fetchNotices()};
@@ -402,10 +410,12 @@ function initEvents(){
  map.on('resize',()=>{if(!state.selected)fitUkraine()});
  document.querySelectorAll('[data-tab]').forEach(button=>button.onclick=()=>switchTab(button.dataset.tab));
  document.querySelectorAll('[data-filter]').forEach(button=>button.onclick=()=>{
-   state.filter=button.dataset.filter;
-   document.querySelectorAll('[data-filter]').forEach(b=>{const on=b.dataset.filter===state.filter;b.classList.toggle('on',on);b.setAttribute('aria-pressed',String(on))});
-   updateCounts();recolor();renderPanel();renderDetail();
+   state.hiddenSymbols=toggleSymbolLayer(state.hiddenSymbols,button.dataset.filter);
+   state.showThreats=true;
+   $('threat-toggle').classList.add('on');$('threat-toggle').setAttribute('aria-pressed','true');
+   syncLayerControls();updateCounts();refreshThreatMarkers();
  });
+ syncLayerControls();
  $('region-search').oninput=debounce(renderPanel,120);
  document.addEventListener('visibilitychange',()=>{if(!document.hidden){fetchAlerts();fetchNotices()}});
  $('drawer').addEventListener('keydown',event=>{
