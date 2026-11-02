@@ -6,9 +6,12 @@ export const THREATS = Object.freeze({
  drones:'Загроза БпЛА',ballistic_missiles:'Балістична загроза',cruise_missiles:'Крилаті ракети',unspecified_missiles:'Ракетна загроза',guided_aerial_bombs:'Керовані авіабомби',tactic_aircraft_activity:'Тактична авіація',strategic_aircraft_activity:'Стратегічна авіація',mig31k_departure:'МіГ-31К',air_defense:'Робота ППО',unknown:'Інша загроза'
 });
 export function norm(value){
- return String(value??'').normalize('NFC').toLocaleLowerCase('uk-UA')
+ const key=String(value??'').normalize('NFC').toLocaleLowerCase('uk-UA')
   .replace(/^(?:місто|м[.]?)\s+/,'').replace(/\s+(?:область|обл[.]?|район|р-н)\s*$/,'')
   .replace(/[’'\u02bc\u2019\u0060]/g,'').replace(/[^\p{L}\p{N}]/gu,'');
+ const aliases={'новомосковський':'самарівський','червоноградський':'шептицький',
+   'красноградський':'берестинський','сєвєродонецький':'сіверськодонецький'};
+ return aliases[key]||key;
 }
 export function validStart(value){const stamp=Date.parse(String(value??''));return Number.isFinite(stamp)&&stamp>0?stamp:null}
 export function duration(value,now=Date.now()){
