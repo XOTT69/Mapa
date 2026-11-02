@@ -95,13 +95,30 @@ async function switchMode(mode,first=false){
 }
 function refreshLabels(){
  nameLayer.clearLayers();
- if(state.mode!=='oblast'||map.getZoom()<6||window.innerWidth<760)return;
- for(const [name,lat,lng] of oblastAnchors){
-   if(name==='м. Київ'||name==='м. Севастополь')continue;
-   const short=name.replace(/ область$/,'').replace(/^Автономна Республіка /,'');
-   L.marker([lat,lng],{interactive:false,zIndexOffset:50,icon:L.divIcon({
-    className:'region-label',html:'<span>'+esc(short)+'</span>',iconSize:[110,18],iconAnchor:[55,9]
-   })}).addTo(nameLayer);
+ const zoom=map.getZoom(),viewport=map.getBounds().pad(.12);
+ function addLabel(region,point,width){
+   const info=regionData(region);
+   const short=region.name.replace(/ область$/,'').replace(/ район$/,'').replace(/^Автономна Республіка /,'');
+   const time=info.startedAt?'<small data-duration="'+info.startedAt+'">'+duration(info.startedAt)+'</small>':'';
+   const icon=L.divIcon({className:'region-label',html:'<div class="map-zone-label '+info.severity+'"><b>'+esc(short)+'</b>'+time+'</div>',
+    iconSize:[width,35],iconAnchor:[width/2,18]});
+   L.marker(point,{icon,interactive:false,keyboard:false,zIndexOffset:50}).addTo(nameLayer);
+ }
+ if(state.mode==='oblast'&&zoom>=6&&(window.innerWidth>=760||zoom>=7)){
+  for(const [name,lat,lng] of oblastAnchors){
+    if(name==='м. Київ'||name==='м. Севастополь')continue;
+    if(!viewport.contains([lat,lng]))continue;
+    addLabel({type:'oblast',name,oblast:name},[lat,lng],108);
+  }
+ }else if(state.mode==='raion'&&zoom>=8&&state.layers.raion){
+  let count=0;
+  state.layers.raion.eachLayer(shape=>{
+    if(count>=70)return;
+    const center=shape.getBounds().getCenter();
+    if(!viewport.contains(center))return;
+    addLabel(regionFromFeature(shape.feature,'raion'),center,92);
+    count++;
+  });
  }
 }
 function refreshThreatMarkers(){
