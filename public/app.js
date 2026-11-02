@@ -32,13 +32,37 @@ function openDetail(name){
  $('star').onclick=()=>{favorites.has(name)?favorites.delete(name):favorites.add(name);localStorage.setItem('mapa-favorites',JSON.stringify([...favorites]));openDetail(name);renderList()};
 }
 async function loadOutline(){
- try{
- const r=await fetch('https://cdn.jsdelivr.net/gh/darmat1/ukraine-geo-data@main/geodata/Ukraine.geojson');
- if(!r.ok)throw Error('Map boundaries unavailable');
- const data=await r.json();
- layer=L.geoJSON(data,{style:{fillColor:fill.none,fillOpacity:.7,color:'#7589a7',weight:1.2},onEachFeature:(feature,shape)=>{const n=findName(feature);shape._oblast=n;shape.on('click',()=>openDetail(n));shape.on('mouseover',()=>shape.setStyle({weight:2.5,color:'#d5e9ff'}));shape.on('mouseout',()=>paint());shape.bindTooltip(n,{sticky:true})}}).addTo(map);
- paint();map.fitBounds(layer.getBounds(),{padding:[12,12]});
- }catch(e){$('status').textContent='● Контури недоступні';console.warn(e);}
+ const sources=[
+  'https://cdn.jsdelivr.net/gh/darmat1/ukraine-geo-data@main/geodata/Ukraine.geojson',
+  'https://raw.githubusercontent.com/darmat1/ukraine-geo-data/main/geodata/Ukraine.geojson'
+ ];
+ for(const source of sources){
+  try{
+   const response=await fetch(source,{cache:'force-cache'});
+   if(!response.ok)throw Error('HTTP '+response.status);
+   const data=await response.json();
+   if(data.type!=='FeatureCollection'||!Array.isArray(data.features)||data.features.length<20)throw Error('Неповні дані кордонів');
+   layer=L.geoJSON(data,{style:{fillColor:fill.none,fillOpacity:.78,color:'#8b9db7',weight:1.4,opacity:.9},
+     onEachFeature:(feature,shape)=>{
+      const name=findName(feature);
+      shape._oblast=name;
+      shape.on('click',()=>openDetail(name));
+      shape.on('mouseover',()=>shape.setStyle({weight:2.6,color:'#f1f6ff'}));
+      shape.on('mouseout',()=>paint());
+      shape.bindTooltip(name,{sticky:true,direction:'auto'});
+     }}).addTo(map);
+   paint();
+   const bounds=layer.getBounds();if(bounds.isValid())map.fitBounds(bounds,{padding:[18,18],maxZoom:7});
+   $('map-source').textContent='● Контури областей завантажено';
+   $('map-source').classList.add('ready');
+   return;
+  }catch(error){console.warn('GeoJSON:',error)}
+ }
+ $('map-source').textContent='⚠ Контури областей недоступні · перевірте підключення';
+ $('map-source').classList.add('failed');
+ // Give the user an interactive map even when both external border feeds fail.
+ for(const region of anchors){L.circleMarker([region.lat,region.lon],{radius:6,color:'#7199b4',fillColor:'#51627c',fillOpacity:.85})
+ .bindTooltip(region.name).on('click',()=>openDetail(region.name)).addTo(map)}
 }
 function renderList(){
  const query=normalize($('search').value);const by=grouped();
@@ -71,3 +95,53 @@ $('locate').onclick=()=>map.locate({setView:true,maxZoom:9,enableHighAccuracy:fa
 map.on('locationerror',()=>alert('Не вдалося визначити місцеположення. Дозвольте доступ у браузері.'));
 loadOutline();update();setInterval(()=>{if(!document.hidden)update()},45000);
 if('serviceWorker'in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
+/* DEMONSTRATION ONLY: predetermined fictional paths. Never derived from live alerts,
+ * Telegram messages, actual drone positions, routes, counts or predictions. */
+const fictionalRoutes=[
+ [[48.3,27.5],[48.6,28.5],[48.3,29.4],[48.7,30.1]],
+ [[49.5,33.0],[49.1,32.5],[48.8,32.9],[48.5,32.3]],
+ [[47.3,34.1],[47.6,33.4],[47.8,33.1],[48.1,32.7]]
+];
+let demoEnabled=false,demoSpeed=1,demoEpoch=0,demoFrame=null;
+const demoLayer=L.layerGroup(),demoIcons=[];
+const demoIcon=L.divIcon({className:'demo-icon',html:'<div class="demo-drone"><b>◇</b><small>ДЕМО</small></div>',iconSize:[48,39],iconAnchor:[24,20]});
+function demoPosition(points,t){
+ const progress=Math.max(0,Math.min(points.length-1.000001,t));
+ const i=Math.floor(progress),alpha=progress-i;
+ return [points[i][0]+(points[i+1][0]-points[i][0])*alpha,points[i][1]+(points[i+1][1]-points[i][1])*alpha];
+}
+function animateDemo(timestamp){
+ if(!demoEnabled)return;
+ if(!demoEpoch)demoEpoch=timestamp;
+ const tick=(timestamp-demoEpoch)/14000*demoSpeed;
+ for(let i=0;i<fictionalRoutes.length;i++){
+  const route=fictionalRoutes[i],progress=(tick+i*.7)%(route.length-1);
+  demoIcons[i].setLatLng(demoPosition(route,progress));
+ }
+ demoFrame=requestAnimationFrame(animateDemo);
+}
+function setDemo(visible){
+ demoEnabled=visible;
+ $('demo-toggle').classList.toggle('selected',visible);
+ $('demo-toggle').setAttribute('aria-pressed',String(visible));
+ $('demo-controls').hidden=!visible;
+ $('demo-banner').hidden=!visible;
+ if(demoFrame)cancelAnimationFrame(demoFrame);
+ if(visible){
+  demoLayer.addTo(map);
+  if(!demoIcons.length){
+   fictionalRoutes.forEach(route=>{
+    L.polyline(route,{color:'#b584ff',weight:2,dashArray:'5 9',opacity:.65}).addTo(demoLayer);
+    demoIcons.push(L.marker(route[0],{icon:demoIcon,interactive:false}).addTo(demoLayer));
+   });
+  }
+  demoEpoch=0;demoFrame=requestAnimationFrame(animateDemo);
+ }else{demoLayer.remove();demoEpoch=0;demoFrame=null}
+}
+$('demo-toggle').onclick=()=>setDemo(!demoEnabled);
+$('demo-speed').oninput=e=>{demoSpeed=Number(e.target.value);$('demo-speed-value').textContent=demoSpeed+'×'};
+document.addEventListener('visibilitychange',()=>{
+ if(!demoEnabled)return;
+ if(document.hidden){if(demoFrame)cancelAnimationFrame(demoFrame);demoFrame=null}
+ else {demoEpoch=0;demoFrame=requestAnimationFrame(animateDemo)}
+});
