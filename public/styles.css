@@ -37,6 +37,9 @@ html[data-theme=light] .leaflet-control-zoom a{background:#fff!important;color:#
 @media(max-width:700px){.drawer-tabs{gap:2px;padding-left:9px;padding-right:9px}.drawer-tabs button{font-size:9px}.detail-card .place-entry{flex-wrap:wrap}.place-entry input{min-width:130px}.detail-card{max-height:53dvh}}
 html[data-theme=light] .region-card.red{border-left-color:#c45465}html[data-theme=light] .region-card.yellow,html[data-theme=light] .region-card.partial{border-left-color:#ad833b}html[data-theme=light] .region-card.other{border-left-color:#8b72b3}
 
+.map-actions #map-find{border-color:#7c9b5e;color:#d4edbb}
+html[data-theme=light] .map-actions #map-find{color:#405e29}
+@media(max-width:700px){.map-zone-label{max-width:84px;overflow:hidden;text-overflow:ellipsis}}
 .chip-badge{font-size:10px;font-weight:700;color:#ff8c8c;margin-left:4px}.toolbar-chip.on .chip-badge{color:inherit}
 
 .map-toolbar{overflow-x:auto;scrollbar-width:none}.map-toolbar::-webkit-scrollbar{display:none}.map-toolbar>*{flex:0 0 auto}
