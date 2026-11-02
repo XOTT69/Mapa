@@ -1,3 +1,4 @@
+import {readUserData,upsertPlace,newPlaceId,placeTransitions,USER_STORAGE_KEY} from './user-features.js';
 import {icon,threatSymbols,visibleThreatSymbols,toggleSymbolLayer,SYMBOL_LAYERS,SYMBOL_LABELS} from './map-icons.js';
 import {regions as oblastAnchors} from './regions.js';
 import {TYPES,THREATS,norm,validStart,duration,cleanAlerts,classifyRegion,threatSummary} from './alert-logic.js';
@@ -29,6 +30,10 @@ const noticeLayer=L.layerGroup().addTo(map);
 const anchorMap=new Map(oblastAnchors.map(([name,lat,lng])=>[norm(name),[lat,lng]]));
 const knownRegions=new Map();
 const favoriteKey='mapa-favorites-v2';
+const userData=readUserData({getItem:key=>localStorage.getItem(key)});
+let previousFreshAlerts=null,previousFreshStamp=0,audioContext=null;
+const themeMedia=window.matchMedia('(prefers-color-scheme: light)');
+const resolvedTheme=()=>userData.preferences.theme==='system'?(themeMedia.matches?'light':'dark'):userData.preferences.theme;
 function readFavorites(){try{const raw=JSON.parse(localStorage.getItem(favoriteKey)||'[]');return new Set(Array.isArray(raw)?raw.filter(x=>typeof x==='string'):[])}catch{return new Set()}}
 const favorites=readFavorites();
 function saveFavorites(){try{localStorage.setItem(favoriteKey,JSON.stringify([...favorites]))}catch{}}
@@ -58,8 +63,10 @@ function allRegions(){
 function statusLabel(severity){return ({red:'Активна тривога',yellow:'Жовтий рівень загрози',partial:'Часткова тривога',other:'Інше активне повідомлення',quiet:'Активних повідомлень не знайдено'})[severity]}
 function featureStyle(feature,mode){
  const stateFor=regionData(regionFromFeature(feature,mode));
- return {color:stateFor.severity==='quiet'?'#647080':stateFor.severity==='partial'?'#e8c58a':'#eda9aa',opacity:.85,weight:map.getZoom()>7?1.25:.85,dashArray:stateFor.severity==='partial'?'3 3':null,
-   fillColor:categoryColor[stateFor.severity],fillOpacity:stateFor.severity==='quiet'?.9:.85};
+ const light=resolvedTheme()==='light';
+ const palette=light?{red:'#e48991',yellow:'#e4c17e',partial:'#e4c17e',other:'#bcb0d1',quiet:'#d6dce5'}:categoryColor;
+ return {color:stateFor.severity==='quiet'?(light?'#96a2b3':'#647080'):stateFor.severity==='partial'?(light?'#8d681f':'#e8c58a'):(light?'#a34c56':'#eda9aa'),opacity:.85,weight:map.getZoom()>7?1.25:.85,dashArray:stateFor.severity==='partial'?'3 3':null,
+   fillColor:palette[stateFor.severity],fillOpacity:stateFor.severity==='quiet'?.9:.85};
 }
 function registerLayer(data,mode){
  if(data?.type!=='FeatureCollection'||!Array.isArray(data.features)||data.features.length<(mode==='oblast'?20:100))throw Error('Неповний GeoJSON');
@@ -187,6 +194,7 @@ function refreshThreatMarkers(){
 function regionStart(data){return data.startedAt??null}
 function renderDetail(){
  if(!state.selected){show('details',false);return}
+ const draft=$('place-name')?.value||'',typing=document.activeElement?.id==='place-name',caret=typing?$('place-name').selectionStart:null;
  const region=state.selected,info=regionData(region),key=regionKey(region),fav=favorites.has(key);
  const alertsSorted=[...info.alerts].sort((a,b)=>(validStart(a.started_at)||Infinity)-(validStart(b.started_at)||Infinity));
  const parent=region.type==='raion'?esc(region.oblast)+' · район':region.name.startsWith('м.')?'Місто':'Область';
@@ -207,11 +215,22 @@ function renderDetail(){
     (inner?'<div class="detail-sources">'+inner+'</div>':'<p class="section-note">У поточній відповіді API немає активних повідомлень для цієї території.</p>')+
     '<div class="detail-footer"><button class="small-btn" id="details-star" type="button">'+(fav?'★ Прибрати з обраного':'☆ В обране')+'</button>'+
     '<button class="small-btn" id="details-panel" type="button">☰ Інформація</button></div>'+
+    '<form id="place-form" class="place-form"><label class="input-label" for="place-name">Моє місце в цьому регіоні</label><div class="place-entry"><input id="place-name" type="text" maxlength="48" required placeholder="Дім, Робота, Батьки…" autocomplete="off"><button class="small-btn" type="submit">Зберегти</button></div><small>Якщо назва вже є — її регіон оновиться.</small></form>'+
     '<p class="detail-note">Розфарбування адміністративної одиниці не означає, що загроза рівномірна на всій території. Для безпеки звіряйтеся з офіційними сповіщеннями.</p>';
+ $('place-name').value=draft;
+ if(typing){$('place-name').focus();$('place-name').setSelectionRange(caret,caret)}
  show('details',true);
  $('details-close').onclick=()=>{state.selected=null;show('details',false)};
  $('details-star').onclick=()=>{favorites.has(key)?favorites.delete(key):favorites.add(key);saveFavorites();renderDetail();renderPanel();toast(favorites.has(key)?'Регіон додано в обране':'Регіон прибрано з обраного')};
  $('details-panel').onclick=()=>openDrawer('alerts');
+ $('place-form').onsubmit=event=>{
+  event.preventDefault();
+  try{
+   userData.places=upsertPlace(userData.places,$('place-name').value,region,newPlaceId());
+   const saved=persistUser();renderPlaces();openDrawer('favorites');if(saved)toast('Місце збережено на цьому пристрої');
+  }catch(error){toast(error.message)}
+ };
+
 }
 function openRegion(region){
  state.selected=region;
@@ -259,6 +278,7 @@ function renderPanel(){
  const favRegions=[...favorites].map(key=>knownRegions.get(key)).filter(Boolean);
  $('favorite-list').innerHTML=favRegions.length?favRegions.map(card).join(''):'<p class="section-note">Натисніть на область чи район і додайте його в обране.</p>';
  bindCards($('favorite-list'));
+ renderPlaces();
 }
 function updateCounts(){
  const oblasts=state.geo.oblast?.features||[];
@@ -305,6 +325,11 @@ async function fetchAlerts(){
    state.updatedAt=payload.updatedAt||new Date().toISOString();
    state.stale=Boolean(payload.stale)||Date.now()-Date.parse(state.updatedAt)>120000;
    state.ready=true;
+   if(!state.stale&&Date.parse(state.updatedAt)>previousFreshStamp){
+    const changes=placeTransitions(previousFreshAlerts,items,userData.places);
+    previousFreshAlerts=items;previousFreshStamp=Date.parse(state.updatedAt);
+    announcePlaceChanges(changes);
+   }
    connectionStatus(state.stale?'stale':'live',state.stale?'Застарілі дані':'Онлайн');
    if(state.layers.oblast||state.layers.raion)show('map-error',false);
    $('sync-time').textContent=formatClock(new Date(state.updatedAt));
@@ -342,7 +367,7 @@ function closeDrawer(){
 function switchTab(tab){
  state.tab=tab;
  for(const button of document.querySelectorAll('[data-tab]'))button.classList.toggle('on',button.dataset.tab===tab);
- for(const name of ['alerts','regions','favorites','about','notices'])show('tab-'+name,name===tab);
+ for(const name of ['alerts','regions','favorites','about','notices','settings'])show('tab-'+name,name===tab);
  if(tab==='regions')$('region-search').focus();
 }
 function refreshNotices(){
@@ -370,6 +395,78 @@ async function fetchNotices(){
   state.notices=data.notices;state.noticesStatus=data.status;state.noticeSources=Array.isArray(data.sources)?data.sources:[];
  }catch{state.notices=[];state.noticesStatus='error';state.noticeSources=state.noticeSources.map(s=>({...s,status:'unavailable'}))}
  refreshNotices();
+}
+function persistUser(){
+ try{localStorage.setItem(USER_STORAGE_KEY,JSON.stringify(userData));return true}
+ catch{toast('Браузер не дозволив зберегти налаштування. Вони діятимуть лише до закриття сторінки.');return false}
+}
+function applyTheme(){
+ const light=resolvedTheme()==='light';
+ document.documentElement.dataset.theme=light?'light':'dark';
+ document.querySelector('meta[name="theme-color"]').content=light?'#f4f6fa':'#15181f';
+ tileLayer.setUrl('https://{s}.basemaps.cartocdn.com/'+(light?'light_all':'dark_all')+'/{z}/{x}/{y}{r}.png');
+ recolor();
+}
+function renderPlaces(){
+ $('places-list').innerHTML=userData.places.length?userData.places.map(place=>{
+  const info=regionData(place.region);
+  return '<article class="place-card"><button class="region-card '+info.severity+'" data-open-place="'+esc(place.id)+'"><span class="region-card-head"><b>'+esc(place.name)+'</b><em>↗</em></span><small>'+esc(place.region.name)+' · '+esc(statusLabel(info.severity))+(info.startedAt?' · <span data-duration="'+info.startedAt+'">'+duration(info.startedAt)+'</span>':'')+'</small></button><div class="place-actions"><label><input type="checkbox" data-watch-place="'+esc(place.id)+'" '+(place.watch?'checked':'')+'> Стежити за тривогою</label><button type="button" data-remove-place="'+esc(place.id)+'" aria-label="Видалити місце '+esc(place.name)+'">Видалити</button></div></article>';
+ }).join(''):'<p class="section-note">Місць поки немає. Натисніть на область або район і збережіть його з власною назвою.</p>';
+ $('places-list').querySelectorAll('[data-open-place]').forEach(button=>button.onclick=()=>{const place=userData.places.find(p=>p.id===button.dataset.openPlace);if(place)zoomToRegion(place.region)});
+ $('places-list').querySelectorAll('[data-watch-place]').forEach(input=>input.onchange=()=>{const place=userData.places.find(p=>p.id===input.dataset.watchPlace);if(place){place.watch=input.checked;persistUser()}});
+ $('places-list').querySelectorAll('[data-remove-place]').forEach(button=>button.onclick=()=>{userData.places=userData.places.filter(p=>p.id!==button.dataset.removePlace);persistUser();renderPlaces()});
+}
+async function playSound(interactive=false){
+ const Audio=window.AudioContext||window.webkitAudioContext;
+ if(!Audio)throw Error('Звук у цьому браузері недоступний');
+ if(!interactive&&(!audioContext||audioContext.state!=='running'))throw Error('Звук потребує натискання кнопки у браузері');
+ audioContext??=new Audio();
+ if(audioContext.state==='suspended')await audioContext.resume();
+ if(audioContext.state!=='running')throw Error('Натисніть «Перевірити звук», щоб дозволити його відтворення');
+ for(let i=0;i<2;i++){
+  const oscillator=audioContext.createOscillator(),gain=audioContext.createGain(),start=audioContext.currentTime+i*.25;
+  oscillator.frequency.value=i?660:520;oscillator.type='sine';gain.gain.setValueAtTime(0,start);gain.gain.linearRampToValueAtTime(.12,start+.025);gain.gain.linearRampToValueAtTime(0,start+.18);
+  oscillator.connect(gain);gain.connect(audioContext.destination);oscillator.start(start);oscillator.stop(start+.2);
+ }
+}
+async function announcePlaceChanges(changes){
+ if(!changes.length)return;
+ const messages=changes.map(({place,kind})=>place.name+': '+(kind==='active'?'нове повідомлення про тривогу':'активне повідомлення про тривогу відсутнє у свіжих даних'));
+ toast(messages.join(' · '));
+ if(userData.preferences.sound){try{await playSound()}catch{$('notification-status').textContent='Звук заблокований браузером. Натисніть «Перевірити звук» у налаштуваннях.'}}
+ if(userData.preferences.notifications&&'Notification' in window&&Notification.permission==='granted'){
+  try{
+   const registration=await navigator.serviceWorker.getRegistration();
+   if(!registration?.active)throw Error('Notification worker unavailable');
+   for(const {place,kind} of changes)await registration.showNotification('MAPA UA · '+place.name,{body:(kind==='active'?'Нове повідомлення про повітряну тривогу':'Активне повідомлення про тривогу відсутнє у свіжих даних')+' · '+place.region.name,tag:'mapa-place-'+place.id,icon:'/icon.svg',data:{url:'/?place='+encodeURIComponent(place.id)}});
+  }catch{$('notification-status').textContent='Браузер не зміг показати системне сповіщення.'}
+ }
+}
+function initPreferences(){
+ $('theme-select').value=userData.preferences.theme;
+ $('sound-enabled').checked=userData.preferences.sound;
+ $('notifications-enabled').checked=userData.preferences.notifications&&'Notification' in window&&Notification.permission==='granted';
+ $('theme-select').onchange=event=>{userData.preferences.theme=event.target.value;persistUser();applyTheme()};
+ themeMedia.addEventListener('change',()=>{if(userData.preferences.theme==='system')applyTheme()});
+ $('sound-enabled').onchange=async event=>{
+  userData.preferences.sound=event.target.checked;
+  if(event.target.checked){try{await playSound(true)}catch(error){userData.preferences.sound=false;event.target.checked=false;toast(error.message)}}
+  persistUser();
+ };
+ $('sound-test').onclick=()=>playSound(true).catch(error=>toast(error.message));
+ const supported='Notification' in window&&'serviceWorker' in navigator&&window.isSecureContext;
+ $('notifications-enabled').disabled=!supported;
+ $('notification-status').textContent=supported?'Дозвіл браузера запитується лише після ввімкнення перемикача.':'Цей браузер не підтримує системних сповіщень. Скористайтеся звуком у відкритій карті.';
+ $('notifications-enabled').onchange=async event=>{
+  const input=event.target;input.disabled=true;
+  try{
+   const permission=input.checked?await Notification.requestPermission():Notification.permission;
+   userData.preferences.notifications=input.checked&&permission==='granted';input.checked=userData.preferences.notifications;
+   $('notification-status').textContent=input.checked?'Увімкнено для активної відкритої карти.':permission==='denied'?'Дозвіл заблокований у налаштуваннях браузера.':'Системні сповіщення вимкнено.';
+  }catch{input.checked=false;userData.preferences.notifications=false;$('notification-status').textContent='Не вдалося отримати дозвіл. На iPhone спробуйте встановлену PWA.'}
+  finally{input.disabled=false;persistUser()}
+ };
+ applyTheme();renderPlaces();
 }
 function syncLayerControls(){
  for(const button of document.querySelectorAll('[data-filter]')){
@@ -427,7 +524,8 @@ function initEvents(){
  });
 }
 initEvents();
-switchMode('oblast',true);
+initPreferences();
+switchMode('oblast',true).then(()=>{const id=new URL(location.href).searchParams.get('place'),place=userData.places.find(p=>p.id===id);if(place)zoomToRegion(place.region)});
 fetchAlerts();
 fetchNotices();
 updateDurations();

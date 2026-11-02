@@ -1,5 +1,6 @@
 // Static symbols for regional threat categories. Orientation never represents a heading.
 const shapes={
+ settings:'<path d="M12 3h8l1 5 4 2 4-1 3 6-4 3v4l-4 3-1 4h-7l-2-4-4-2-4 1-3-6 4-3v-4l4-3 1-5Z"/><circle cx="16" cy="16" r="5"/>',
  missile:'<path d="M16 3c-3 3-4.5 6-4.5 10v8h9v-8C20.5 9 19 6 16 3Z"/><path d="m11.5 16-5 8 5-1m9-7 5 8-5-1M13 25l3 4 3-4"/><circle cx="16" cy="12" r="1.5"/>',
  drone:'<path d="m16 3 2 9 12 7v3l-12-3v6l4 3v1l-6-1-6 1v-1l4-3v-6L2 22v-3l12-7 2-9Z"/>',
  bomb:'<path d="m13 5 3 3 3-3 3 3-3 4 2 4c3 5-1 11-5 13-4-2-8-8-5-13l2-4-3-4 3-3Z"/><path d="m12 17 8 4"/>',
