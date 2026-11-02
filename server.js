@@ -1,10 +1,11 @@
 import http from 'node:http';import{readFile}from'node:fs/promises';import path from'node:path';
 import alertsHandler from './api/alerts.js';
 import noticesHandler from './api/notices.js';
+import threatsHandler from './api/threats.js';
 const port=Number(process.env.PORT||3000);
 http.createServer(async(req,res)=>{
  const u=new URL(req.url,'http://localhost');
- const handler=({'/api/alerts':alertsHandler,'/api/notices':noticesHandler})[u.pathname];
+ const handler=({'/api/alerts':alertsHandler,'/api/notices':noticesHandler,'/api/threats':threatsHandler})[u.pathname];
  if(handler){
   res.status=code=>{res.statusCode=code;return res};
   res.json=data=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify(data))};
