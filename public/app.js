@@ -4,11 +4,11 @@ const escapeHTML=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 const title={air_raid:'Повітряна тривога',artillery_shelling:'Артилерійський обстріл',urban_fights:'Бойові дії',chemical:'Хімічна загроза',nuclear:'Радіаційна загроза'};
 const normalize=s=>String(s||'').toLowerCase().replace(/^(місто |м\. )/,'').replace(/( область| обл\.)$/,'').replace(/ї/g,'ї').replace(/[^а-яіїєґ]/g,'');
 const anchors=regions.map(([name,lat,lon])=>({name,lat,lon,key:normalize(name)}));
-const map=L.map('map',{zoomControl:false,minZoom:5,maxZoom:11,preferCanvas:true}).setView([48.8,31.6],6);
+const map=L.map('map',{zoomControl:false,minZoom:5,maxZoom:11,preferCanvas:true,attributionControl:true,worldCopyJump:false}).setView([48.8,31.6],6);
 L.control.zoom({position:'bottomright'}).addTo(map);
 const dark=L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{attribution:'&copy; OpenStreetMap &copy; CARTO',maxZoom:18});
 const light=L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{attribution:'&copy; OpenStreetMap &copy; CARTO',maxZoom:18});
-dark.addTo(map);let lightMode=false,showOutline=true,filter='all',alerts=[],updatedAt=null,loaded=false,layer=null,selected=null;
+let lightMode=false,showOutline=true,filter='all',alerts=[],updatedAt=null,loaded=false,layer=null,selected=null;
 const favorites=new Set(JSON.parse(localStorage.getItem('mapa-favorites')||'[]'));
 const keyFor=a=>normalize(a.location_oblast||a.location_title);
 const match=a=>filter==='all'||(filter==='other'?!['air_raid','artillery_shelling'].includes(a.alert_type):a.alert_type===filter);
@@ -23,8 +23,8 @@ function findName(feature){
 }
 function countsFor(name){const k=normalize(name);const values=[...grouped().entries()].filter(([key])=>key===k||key.includes(k)&&k.length>5).flatMap(([,a])=>a);return values}
 function statusFor(name){const items=countsFor(name);return items.some(a=>a.alert_level==='red'||a.alert_type==='air_raid'&&a.alert_level!=='yellow')?'red':items.length?'yellow':'none'}
-const fill={red:'#e94560',yellow:'#e6a13f',none:'#26374d'};
-function paint(){if(!layer)return;layer.eachLayer(item=>{const s=statusFor(item._oblast);item.setStyle({fillColor:fill[s],fillOpacity:s==='none'?.68:.82,color:'#697e9d',weight:map.getZoom()>7?1.6:1.1,opacity:.85});if(s==='red')item.bringToFront()})}
+const fill={red:'#e94765',yellow:'#f2a84f',none:'#193455'};
+function paint(){if(!layer)return;layer.eachLayer(item=>{const s=statusFor(item._oblast);item.setStyle({fillColor:fill[s],fillOpacity:s==='none'?.86:.92,color:s==='none'?'#44749b':'#ffc3cf',weight:map.getZoom()>7?1.65:1.1,opacity:.92});if(s==='red')item.bringToFront()})}
 function openDetail(name){
  selected=name;const list=countsFor(name);const fav=favorites.has(name);
  $('detail').hidden=false;$('detail').innerHTML='<button class="close" id="close-detail" aria-label="Закрити">×</button><div class="eyebrow">ОБРАНИЙ РЕГІОН</div><h2>'+escapeHTML(name)+'</h2><p class="severity">'+(list.length?'<b style="color:#ff6b80">● Активні повідомлення: '+list.length+'</b>':'Активних повідомлень у доступних даних не виявлено')+'</p><button id="star" class="chip">'+(fav?'★ Прибрати з обраного':'☆ Додати в обране')+'</button><div class="detail-items">'+list.slice(0,20).map(a=>'<p><strong>'+escapeHTML(title[a.alert_type]||a.alert_type||'Загроза')+'</strong><br><small>'+escapeHTML(a.location_title||'')+'</small></p>').join('')+'</div><small>Позначення охоплює область; окремі тривоги можуть стосуватися лише частини її території.</small>';
@@ -32,17 +32,14 @@ function openDetail(name){
  $('star').onclick=()=>{favorites.has(name)?favorites.delete(name):favorites.add(name);localStorage.setItem('mapa-favorites',JSON.stringify([...favorites]));openDetail(name);renderList()};
 }
 async function loadOutline(){
- const sources=[
-  'https://cdn.jsdelivr.net/gh/darmat1/ukraine-geo-data@main/geodata/Ukraine.geojson',
-  'https://raw.githubusercontent.com/darmat1/ukraine-geo-data/main/geodata/Ukraine.geojson'
- ];
+ const sources=['/ukraine-oblasts.geojson'];
  for(const source of sources){
   try{
    const response=await fetch(source,{cache:'force-cache'});
    if(!response.ok)throw Error('HTTP '+response.status);
    const data=await response.json();
    if(data.type!=='FeatureCollection'||!Array.isArray(data.features)||data.features.length<20)throw Error('Неповні дані кордонів');
-   layer=L.geoJSON(data,{style:{fillColor:fill.none,fillOpacity:.78,color:'#8b9db7',weight:1.4,opacity:.9},
+   layer=L.geoJSON(data,{style:{fillColor:fill.none,fillOpacity:.88,color:'#5287b9',weight:1.35,opacity:.95},
      onEachFeature:(feature,shape)=>{
       const name=findName(feature);
       shape._oblast=name;
@@ -52,8 +49,8 @@ async function loadOutline(){
       shape.bindTooltip(name,{sticky:true,direction:'auto'});
      }}).addTo(map);
    paint();
-   const bounds=layer.getBounds();if(bounds.isValid())map.fitBounds(bounds,{padding:[18,18],maxZoom:7});
-   $('map-source').textContent='● Контури областей завантажено';
+   const bounds=layer.getBounds();if(bounds.isValid())map.fitBounds(bounds,{padding:[25,25],maxZoom:7});
+   $('map-source').textContent='● Межі областей · локальні дані';
    $('map-source').classList.add('ready');
    return;
   }catch(error){console.warn('GeoJSON:',error)}
@@ -87,7 +84,7 @@ async function update(){
 document.querySelectorAll('[data-filter]').forEach(b=>b.onclick=()=>{filter=b.dataset.filter;document.querySelectorAll('[data-filter]').forEach(x=>x.classList.toggle('selected',x===b));paint();renderList()});
 $('search').oninput=renderList;$('refresh').onclick=update;
 $('home').onclick=()=>layer?map.fitBounds(layer.getBounds()):map.setView([48.8,31.6],6);
-$('basemap').onclick=()=>{lightMode=!lightMode;map.removeLayer(lightMode?dark:light);(lightMode?light:dark).addTo(map);$('basemap').textContent=lightMode?'◉ Темна мапа':'◉ Світла мапа'};
+$('basemap').onclick=()=>{lightMode=!lightMode;if(lightMode){dark.addTo(map);dark.bringToBack()}else{map.removeLayer(dark)}$('basemap').textContent=lightMode?'◉ Атлас областей':'◉ Супутній фон'};
 $('favorites-only').onclick=()=>{$('favorites-only').classList.toggle('selected');renderList()};
 $('map-mode').onclick=()=>{showOutline=!showOutline;$('map-mode').classList.toggle('selected',showOutline);if(layer){showOutline?layer.addTo(map):map.removeLayer(layer)}};
 $('toggle-panel').onclick=()=>{$('panel').classList.toggle('expanded');setTimeout(()=>map.invalidateSize(),200)};
@@ -145,3 +142,6 @@ document.addEventListener('visibilitychange',()=>{
  if(document.hidden){if(demoFrame)cancelAnimationFrame(demoFrame);demoFrame=null}
  else {demoEpoch=0;demoFrame=requestAnimationFrame(animateDemo)}
 });
+
+function tickClock(){const now=new Date();$('map-clock').textContent='КИЇВ · '+new Intl.DateTimeFormat('uk-UA',{hour:'2-digit',minute:'2-digit',timeZone:'Europe/Kyiv',hour12:false}).format(now)}
+tickClock();setInterval(tickClock,30000);
