@@ -5,6 +5,7 @@ const $=id=>document.getElementById(id);
 const esc=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const show=(id,value)=>{$(id).hidden=!value};
 const formatClock=date=>new Intl.DateTimeFormat('uk-UA',{timeZone:'Europe/Kyiv',hour:'2-digit',minute:'2-digit',hour12:false}).format(date);
+const formatStart=date=>new Intl.DateTimeFormat('uk-UA',{timeZone:'Europe/Kyiv',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:false}).format(date);
 const typeLabel=alert=>TYPES[alert.alert_type]||'Інше повідомлення';
 const threatLabel=code=>THREATS[code]||'Загроза: '+code;
 const categoryColor={red:'#f04c69',yellow:'#eeb054',partial:'#eeb054',other:'#90a6e7',quiet:'#21496c'};
@@ -156,13 +157,13 @@ function renderDetail(){
    const start=validStart(a.started_at);
    return '<div class="detail-source"><b>'+esc(label)+'</b> · '+esc(a.location_title)+
     (codes.length?'<br>'+codes.map(code=>esc(threatLabel(code))).join(' · '):'')+
-    '<small>'+(start?'Початок: '+formatClock(new Date(start))+' · <span data-duration="'+start+'">'+duration(start)+'</span>':'Час початку невідомий')+'</small></div>'
+    '<small>'+(start?'Початок: '+formatStart(new Date(start))+' · <span data-duration="'+start+'">'+duration(start)+'</span>':'Час початку невідомий')+'</small></div>'
  }).join('');
  $('details').innerHTML='<div class="detail-header"><div><div class="eyebrow">'+parent+'</div><div class="detail-title">'+esc(region.name)+'</div></div>'+
     '<button class="detail-close" type="button" id="details-close" aria-label="Закрити">✕</button></div>'+
     '<div class="detail-status"><i class="status-bullet '+info.severity+'"></i>'+esc(statusLabel(info.severity))+'</div>'+
     '<div class="detail-timer">'+(info.startedAt?'<span data-duration="'+info.startedAt+'">'+duration(info.startedAt)+'</span>':'—')+
-    '<small>'+(info.startedAt?'Від найранішого активного повідомлення':'Час активної тривоги не встановлений')+'</small></div>'+
+    '<small>'+(info.startedAt?'З '+formatStart(new Date(info.startedAt))+' · від найранішого активного повідомлення':'Час активної тривоги не встановлений')+'</small></div>'+
     (inner?'<div class="detail-sources">'+inner+'</div>':'<p class="section-note">У поточній відповіді API немає активних повідомлень для цієї території.</p>')+
     '<div class="detail-footer"><button class="small-btn" id="details-star" type="button">'+(fav?'★ Прибрати з обраного':'☆ В обране')+'</button>'+
     '<button class="small-btn" id="details-panel" type="button">☰ Інформація</button></div>'+
