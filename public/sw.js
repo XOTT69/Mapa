@@ -1,5 +1,5 @@
-const CACHE='mapa-atlas-v12';
-const CORE=['/','/index.html','/app.js','/alert-logic.js','/regions.js','/styles.css','/manifest.webmanifest','/icon.svg','/ukraine-oblasts.geojson','/ukraine-raions.geojson'];
+const CACHE='mapa-atlas-v13';
+const CORE=['/','/index.html','/app.js','/map-icons.js','/vendor/leaflet/leaflet.js','/vendor/leaflet/leaflet.css','/alert-logic.js','/regions.js','/styles.css','/manifest.webmanifest','/icon.svg','/ukraine-oblasts.geojson','/ukraine-raions.geojson'];
 const BORDERS=new Set(['/ukraine-oblasts.geojson','/ukraine-raions.geojson']);
 self.addEventListener('install',event=>{
  event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(CORE)));
@@ -22,5 +22,5 @@ self.addEventListener('fetch',event=>{
  event.respondWith(fetch(event.request).then(res=>{
    if(res.ok&&CORE.includes(url.pathname)){const copy=res.clone();caches.open(CACHE).then(cache=>cache.put(event.request,copy))}
    return res;
- }).catch(()=>caches.match(event.request).then(cached=>cached||caches.match('/index.html'))));
+ }).catch(()=>caches.match(event.request).then(cached=>cached||(event.request.mode==='navigate'?caches.match('/index.html'):Response.error()))));
 });

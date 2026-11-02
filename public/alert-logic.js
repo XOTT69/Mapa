@@ -59,7 +59,7 @@ export function classifyRegion(all,region,filter='all'){
  if(!shown.length)return {severity:'quiet',alerts:shown,count:0,startedAt:null};
  let severity='other',priority=1;
  for(const a of shown){
-  const broad=a.location_type==='oblast'||region.type==='raion'&&a.location_type==='raion';
+  const broad=a.location_type==='oblast'||region.type==='raion'&&a.location_type==='raion'||region.name.startsWith('м.')&&norm(a.location_title)===norm(region.name);
   let current='other',score=1;
   if(a.alert_type==='air_raid'){
    current=a.alert_level==='yellow'?'yellow':broad?'red':'partial';
@@ -67,7 +67,8 @@ export function classifyRegion(all,region,filter='all'){
   }else if(a.alert_level==='yellow'){current='yellow';score=2}
   if(score>priority){priority=score;severity=current}
  }
- const stamps=shown.map(a=>validStart(a.started_at)).filter(x=>x!==null);
+ const airAlerts=shown.filter(a=>a.alert_type==='air_raid');
+ const stamps=(airAlerts.length?airAlerts:shown).map(a=>validStart(a.started_at)).filter(x=>x!==null);
  return {severity,alerts:shown,count:shown.length,startedAt:stamps.length?Math.min(...stamps):null};
 }
 export function threatSummary(alerts){
