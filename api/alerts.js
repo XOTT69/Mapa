@@ -19,6 +19,7 @@ export default async function handler(req,res){
     });
     if(!response.ok) throw new Error('upstream '+response.status);
     const data=await response.json();
+    if(!Array.isArray(data)&&!Array.isArray(data?.alerts))throw new Error('invalid upstream payload');
     cached=data;fetchedAt=Date.now();return data;
   })().finally(()=>{pending=null});
   try{

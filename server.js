@@ -1,4 +1,13 @@
 import http from 'node:http';import{readFile}from'node:fs/promises';import path from'node:path';
-const port=Number(process.env.PORT||3000),token=(process.env.ALERTS_API_TOKEN||process.env.ALERTS_TOKEN);let cache=null,updated=0;
-http.createServer(async(req,res)=>{const u=new URL(req.url,'http://localhost');if(u.pathname==='/api/alerts'){res.setHeader('Content-Type','application/json');res.setHeader('Cache-Control','no-store');if(!token){res.writeHead(503);return res.end(JSON.stringify({error:'Configure ALERTS_API_TOKEN'}));}try{if(!cache||Date.now()-updated>45000){const r=await fetch('https://api.alerts.in.ua/v1/alerts/active.json',{headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(10000)});if(!r.ok)throw Error('upstream '+r.status);cache=await r.json();updated=Date.now();}return res.end(JSON.stringify({alerts:cache,updatedAt:new Date(updated).toISOString()}));}catch{res.writeHead(502);return res.end(JSON.stringify({error:'Upstream unavailable'}));}}
+import alertsHandler from './api/alerts.js';
+import noticesHandler from './api/notices.js';
+const port=Number(process.env.PORT||3000);
+http.createServer(async(req,res)=>{
+ const u=new URL(req.url,'http://localhost');
+ const handler=({'/api/alerts':alertsHandler,'/api/notices':noticesHandler})[u.pathname];
+ if(handler){
+  res.status=code=>{res.statusCode=code;return res};
+  res.json=data=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify(data))};
+  return handler(req,res);
+ }
 const p=path.resolve('public','.'+(u.pathname==='/'?'/index.html':u.pathname));if(!p.startsWith(path.resolve('public')+path.sep)){res.writeHead(403);return res.end();}try{const data=await readFile(p);res.setHeader('Content-Type',({'.html':'text/html','.js':'text/javascript','.css':'text/css','.webmanifest':'application/manifest+json'})[path.extname(p)]||'application/octet-stream');res.end(data);}catch{res.writeHead(404);res.end('Not found');}}).listen(port,()=>console.log('MAPA UA on '+port));

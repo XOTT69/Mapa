@@ -42,7 +42,7 @@ test('PWA manifest and icon references exist',()=>{
 });
 test('app includes known core UI elements',()=>{
  const html=readFileSync(new URL('../public/index.html',import.meta.url),'utf8');
- for(const id of ['map','drawer','mode-oblast','mode-raion','details','demo-toggle','alert-list','region-list']){
+ for(const id of ['map','drawer','mode-oblast','mode-raion','details','notice-toggle','source-status','compact-events','notice-list','alert-list','region-list']){
   assert.ok(html.includes('id="'+id+'"'),'Missing HTML control '+id);
  }
 });
