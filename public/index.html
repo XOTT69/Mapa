@@ -70,8 +70,8 @@
     <div class="drawer-tabs" role="group" aria-label="Розділи">
       <button data-tab="alerts" class="on">Активні</button>
       <button data-tab="regions">Регіони</button>
-      <button data-tab="favorites">★ Обрані</button>
-      <button data-tab="notices">Канали</button><button data-tab="about">Про мапу</button>
+      <button data-tab="favorites">Мої місця</button>
+      <button data-tab="notices">Канали</button><button data-tab="settings" aria-label="Налаштування"><span data-ui-icon="settings"></span></button><button data-tab="about">Про мапу</button>
     </div>
     <div class="drawer-body">
 <section class="map-summary" aria-label="Поточна статистика">
@@ -101,16 +101,22 @@
         <div id="region-list" class="region-list"></div>
       </div>
       <div id="tab-favorites" class="tab-panel" hidden>
-        <p class="section-note">Збережені регіони залишаються на цьому пристрої.</p>
+        <div class="about-block"><h2>Дім, Робота та власні місця</h2><p>Збережіть область або район під зручною назвою. Оберіть регіон на карті → «Моє місце». Кількість місць не обмежується підпискою; вони зберігаються на цьому пристрої.</p></div><div id="places-list" class="region-list"></div><h2 class="sources-heading">Обрані регіони</h2>
         <div id="favorite-list" class="region-list"></div>
       </div>
       <div id="tab-notices" class="tab-panel" hidden><p class="section-note">Регіональні повідомлення з визначених каналів. Контур позначає область повідомлення, а не зону прогнозованого руху.</p><div class="notice-status" id="notice-source" role="status">Перевірка каналів…</div><div id="notice-list"></div><h2 class="sources-heading">Джерела повідомлень</h2><p class="section-note">Доступність сторінки не підтверджує достовірність повідомлення. Додаткові канали не визначають офіційного статусу тривоги. Показуються лише явні регіональні оголошення; повідомлення про переміщення цілей пропускаються.</p><div id="channel-sources"></div></div>
+      <div id="tab-settings" class="tab-panel" hidden>
+        <div class="about-block"><h2>Оформлення</h2><label class="input-label" for="theme-select">Тема карти</label><select id="theme-select"><option value="dark">Темна</option><option value="light">Світла</option><option value="system">Як на пристрої</option></select></div>
+        <div class="about-block"><h2>Звук і сповіщення</h2><p>Для збережених місць: нове повідомлення про повітряну тривогу або відсутність попереднього повідомлення у свіжій відповіді API. Працює, поки карта відкрита й активна. Після закриття карти фонові сповіщення не надсилаються.</p><label class="settings-check"><input type="checkbox" id="sound-enabled"> Звук при зміні стану</label><button class="small-btn" id="sound-test" type="button">Перевірити звук</button><label class="settings-check"><input type="checkbox" id="notifications-enabled"> Системні сповіщення</label><p id="notification-status" class="section-note" role="status"></p><p class="section-note">На iPhone ці можливості можуть бути доступні лише після додавання карти на Початковий екран. Обмеження браузера або беззвучний режим можуть блокувати звук.</p></div>
+        <div class="about-block"><h2>Додати на Початковий екран</h2><p>На iPhone: відкрийте карту в Safari → «Поширити» → «На Початковий екран». У Chrome на Android чи комп’ютері скористайтеся пунктом «Встановити застосунок» у меню браузера.</p></div>
+        <div class="about-block"><h2>На цьому пристрої</h2><p>Назви місць, вибрані регіони й налаштування зберігаються у браузері та не передаються серверу. Точна домашня адреса не потрібна.</p></div>
+      </div>
       <div id="tab-about" class="tab-panel" hidden>
         <div class="about-block"><h2>Як читати карту</h2><p>Червоний означає повідомлення про активну тривогу для всієї обраної адміністративної одиниці. Жовтий — попередню або часткову загрозу. Сірий — відсутність активних повідомлень у доступній відповіді API; це не підтвердження безпеки.</p></div>
         <div class="about-block"><h2>Позначки загроз</h2><p>Силует БпЛА, ракети або іншого типу загрози ставиться біля умовного центру області, коли джерело повідомляє про відповідний тип загрози. Вона не означає місцеперебування об’єкта.</p></div>
         <div class="about-block"><h2>Межі доступних даних</h2><p>API надає регіони, час і категорії загроз. Координат цілей, напрямків руху та траєкторій у цьому джерелі немає. Повідомлення каналів показуються окремим пунктирним контуром області й не змінюють статус тривоги.</p></div>
         <div class="about-block"><h2>Джерела й оновлення</h2><p>Статуси: <a href="https://alerts.in.ua/" target="_blank" rel="noopener">alerts.in.ua ↗</a>. Географія: <a href="https://github.com/darmat1/ukraine-geo-data" target="_blank" rel="noopener">ukraine-geo-data ↗</a> та <a href="https://github.com/Astaryon/UA_geojson" target="_blank" rel="noopener">UA_geojson ↗</a>. Оновлення автоматично приблизно кожні 45 секунд.</p></div>
-        <div class="about-block warning"><h2>Важливо для безпеки</h2><p>Дані можуть запізнюватися чи бути неповними. Навіть синій регіон може бути небезпечним. Застосунок не замінює сповіщень від ДСНС і Повітряних сил.</p></div>
+        <div class="about-block warning"><h2>Важливо для безпеки</h2><p>Дані можуть запізнюватися чи бути неповними. Навіть сірий регіон може бути небезпечним. Застосунок не замінює сповіщень від ДСНС і Повітряних сил.</p></div>
       </div>
     </div>
     <footer class="drawer-footer"><span>Джерело: alerts.in.ua</span><span id="footer-status">Очікуємо API</span></footer>
