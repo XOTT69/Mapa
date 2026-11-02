@@ -13,6 +13,8 @@ test('explicit regional announcement becomes a generic civilian bulletin',()=>{
  const notices=parsePublicChannel(page(post(1,'Київська область: оголошено повітряну тривогу!')),source,now);
  assert.equal(notices.length,1);assert.equal(notices[0].region,'Київська область');assert.ok(!notices[0].summary.includes('оголошено'));assert.equal(notices[0].url,'https://t.me/test_channel/1');
  assert.equal(regionalAnnouncement('У Києві оголошено повітряну тривогу!').region,'м. Київ');
+ assert.equal(regionalAnnouncement('У Вінницькій області оголошено повітряну тривогу!').region,'Вінницька область');
+ assert.equal(regionalAnnouncement('Донецька область: оголошено повітряну тривогу!').region,'Донецька область');
 });
 test('all clear cancels an earlier message from the same channel',()=>{
  const html=page(post(1,'Київська область: оголошено повітряну тривогу!')+post(2,'Київська область: відбій повітряної тривоги!','2026-11-02T10:15:00Z'));
