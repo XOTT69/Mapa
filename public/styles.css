@@ -45,6 +45,8 @@ html[data-theme=light] .map-actions #map-find{color:#405e29}
 html[data-theme=light] .basemap-picker{color:#344459}
 html[data-theme=light] .basemap-picker select{background:#fff;color:#344459;border-color:#bac8d8}
 @media(max-width:700px){.basemap-picker{padding:0 2px}.basemap-picker span{display:none}.basemap-picker select{max-width:104px}}
+.leaflet-tile-pane .map-tiles-dark{filter:invert(.88) hue-rotate(180deg) saturate(.65) brightness(.85) contrast(1.14)}
+/* Keep OSM settlement names visible and avoid double labels from the raster background. */
 .map-actions #map-fullscreen{border-color:#7c9b5e}
 @media(max-width:700px){.map-actions button{height:38px;min-width:38px;width:38px}}
 .chip-badge{font-size:10px;font-weight:700;color:#ff8c8c;margin-left:4px}.toolbar-chip.on .chip-badge{color:inherit}
