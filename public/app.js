@@ -28,6 +28,7 @@ const tileLayer=L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}
 map.createPane('settlementNames');
 map.getPane('settlementNames').style.zIndex='450';
 map.getPane('settlementNames').style.pointerEvents='none';
+let showSettlementLabels=true;
 const settlementLabels=L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png',{
  pane:'settlementNames',attribution:'© OpenStreetMap contributors · © CARTO',maxZoom:18
 });
@@ -546,11 +547,31 @@ function initEvents(){
    $('threat-toggle').setAttribute('aria-pressed',String(state.showThreats));
    refreshThreatMarkers();
  };
+ $('settlement-labels-toggle').onclick=()=>{
+   showSettlementLabels=!showSettlementLabels;
+   $('settlement-labels-toggle').classList.toggle('on',showSettlementLabels);
+   $('settlement-labels-toggle').setAttribute('aria-pressed',String(showSettlementLabels));
+   if(showSettlementLabels&&state.tiles)settlementLabels.addTo(map);
+   else map.removeLayer(settlementLabels);
+ };
+ $('map-fullscreen').onclick=async()=>{
+   try{
+     if(document.fullscreenElement)await document.exitFullscreen();
+     else if(document.documentElement.requestFullscreen)await document.documentElement.requestFullscreen();
+     else toast('Повний екран недоступний у цьому браузері');
+   }catch{toast('Браузер не дозволяє повноекранний режим')}
+ };
+ document.addEventListener('fullscreenchange',()=>{
+   const on=!!document.fullscreenElement;
+   $('map-fullscreen').setAttribute('aria-pressed',String(on));
+   $('map-fullscreen').title=on?'Вийти з повного екрана':'Повний екран';
+   setTimeout(()=>map.invalidateSize(),100);
+ });
  $('tiles-toggle').onclick=()=>{
    state.tiles=!state.tiles;
    $('tiles-toggle').classList.toggle('on',state.tiles);
    $('tiles-toggle').setAttribute('aria-pressed',String(state.tiles));
-   if(state.tiles){tileLayer.addTo(map);tileLayer.bringToBack();settlementLabels.addTo(map)}
+   if(state.tiles){tileLayer.addTo(map);tileLayer.bringToBack();if(showSettlementLabels)settlementLabels.addTo(map)}
    else {map.removeLayer(tileLayer);map.removeLayer(settlementLabels)}
  };
  $('shahed-list').onclick=e=>{const b=e.target.closest('[data-id]');if(!b)return;closeDrawer();shahed.focus(b.dataset.id)};
@@ -561,7 +582,7 @@ function initEvents(){
    $('shahed-toggle').setAttribute('aria-pressed',String(state.showShaheds));
    shahed.setVisible(state.showShaheds);
  };
- if(state.tiles){tileLayer.addTo(map);tileLayer.bringToBack();settlementLabels.addTo(map);$('tiles-toggle').classList.add('on');$('tiles-toggle').setAttribute('aria-pressed','true')}
+ if(state.tiles){tileLayer.addTo(map);tileLayer.bringToBack();if(showSettlementLabels)settlementLabels.addTo(map);$('tiles-toggle').classList.add('on');$('tiles-toggle').setAttribute('aria-pressed','true')}
  $('notice-toggle').onclick=()=>{state.showNotices=!state.showNotices;$('notice-toggle').setAttribute('aria-pressed',String(state.showNotices));$('notice-toggle').classList.toggle('on',state.showNotices);refreshNotices()};
  $('refresh').onclick=()=>{fetchAlerts();fetchNotices()};
  $('map-find').onclick=()=>openDrawer('regions');
