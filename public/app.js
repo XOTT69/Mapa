@@ -22,7 +22,7 @@ const regionCache=new Map();
 const boundaryPending={};
 const map=L.map('map',{zoomControl:false,attributionControl:true,preferCanvas:true,minZoom:3,maxZoom:12,zoomSnap:.25}).setView([48.65,31.45],6);
 L.control.zoom({position:'bottomright'}).addTo(map);
-const tileLayer=L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',{
+const tileLayer=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{
   attribution:'© OpenStreetMap contributors · © CARTO',maxZoom:18
 });
 map.createPane('settlementNames');
@@ -37,17 +37,18 @@ function updateBasemap(){
  const variant=basemap==='satellite'?'satellite':basemap==='light'?'light':'dark';
  const basemapUrl=variant==='satellite'
   ?'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
-  :'https://{s}.basemaps.cartocdn.com/'+variant+'_nolabels/{z}/{x}/{y}{r}.png';
+  :'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
  tileLayer.setUrl(basemapUrl);
- tileLayer.options.attribution=variant==='satellite'?'Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community':'© OpenStreetMap contributors · © CARTO';
- settlementLabels.setUrl('https://{s}.basemaps.cartocdn.com/'+(variant==='satellite'?'dark':variant)+'_only_labels/{z}/{x}/{y}{r}.png');
+ tileLayer.options.attribution=variant==='satellite'?'Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community':'© OpenStreetMap contributors';
+ tileLayer.getContainer()?.classList.toggle('map-tiles-dark',variant==='dark');
+ // Standard OSM tiles include settlement labels. Do not overlay duplicate raster labels.
+ if(map.hasLayer(settlementLabels))map.removeLayer(settlementLabels);
  if(oblastOutline)oblastOutline.setStyle({color:variant==='satellite'?'#ffffff':light?'#405b76':'#d9e5f3'});
  const select=$('basemap-select');if(select)select.value=basemap;
 }
 
-const settlementLabels=L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png',{
- pane:'settlementNames',attribution:'© OpenStreetMap contributors · © CARTO',maxZoom:18
-});
+// No separate labels tiles: settlement names are included in the OSM base map.
+const settlementLabels=L.layerGroup();
 let oblastOutline=null;
 let selectedOutline=null;
 function clearSelectedOutline(){if(selectedOutline){map.removeLayer(selectedOutline);selectedOutline=null}}
@@ -239,7 +240,7 @@ function refreshThreatMarkers(){
  }
  for(const {region,point} of entries){
   if(!map.getBounds().pad(.15).contains(point))continue;
-  const info=regionData(region),symbols=visibleThreatSymbols(info.alerts,state.hiddenSymbols);
+  const info=regionData(region),symbols=visibleThreatSymbols(info.alerts,state.hiddenSymbols).filter(symbol=>symbol!=='air');
   if(!symbols.length)continue;
   const labels=symbols.map(name=>SYMBOL_LABELS[name]).join(' · ');
   const marker=L.marker(point,{title:region.name+': '+labels,alt:region.name+': '+labels,zIndexOffset:260,icon:L.divIcon({
@@ -571,7 +572,7 @@ function initEvents(){
    showSettlementLabels=!showSettlementLabels;
    $('settlement-labels-toggle').classList.toggle('on',showSettlementLabels);
    $('settlement-labels-toggle').setAttribute('aria-pressed',String(showSettlementLabels));
-   if(showSettlementLabels&&state.tiles)settlementLabels.addTo(map);
+   if(showSettlementLabels&&state.tiles&&false)settlementLabels.addTo(map);
    else map.removeLayer(settlementLabels);
  };
  $('map-fullscreen').onclick=async()=>{
@@ -591,7 +592,7 @@ function initEvents(){
    state.tiles=!state.tiles;
    $('tiles-toggle').classList.toggle('on',state.tiles);
    $('tiles-toggle').setAttribute('aria-pressed',String(state.tiles));
-   if(state.tiles){tileLayer.addTo(map);tileLayer.bringToBack();if(showSettlementLabels)settlementLabels.addTo(map)}
+   if(state.tiles){tileLayer.addTo(map);tileLayer.bringToBack();if(showSettlementLabels&&false)settlementLabels.addTo(map)}
    else {map.removeLayer(tileLayer);map.removeLayer(settlementLabels)}
  };
  $('shahed-list').onclick=e=>{const b=e.target.closest('[data-id]');if(!b)return;closeDrawer();shahed.focus(b.dataset.id)};
@@ -602,7 +603,7 @@ function initEvents(){
    $('shahed-toggle').setAttribute('aria-pressed',String(state.showShaheds));
    shahed.setVisible(state.showShaheds);
  };
- if(state.tiles){tileLayer.addTo(map);tileLayer.bringToBack();if(showSettlementLabels)settlementLabels.addTo(map);$('tiles-toggle').classList.add('on');$('tiles-toggle').setAttribute('aria-pressed','true')}
+ if(state.tiles){tileLayer.addTo(map);tileLayer.bringToBack();if(showSettlementLabels&&false)settlementLabels.addTo(map);$('tiles-toggle').classList.add('on');$('tiles-toggle').setAttribute('aria-pressed','true')}
  $('notice-toggle').onclick=()=>{state.showNotices=!state.showNotices;$('notice-toggle').setAttribute('aria-pressed',String(state.showNotices));$('notice-toggle').classList.toggle('on',state.showNotices);refreshNotices()};
  $('refresh').onclick=()=>{fetchAlerts();fetchNotices()};
  $('map-find').onclick=()=>openDrawer('regions');
