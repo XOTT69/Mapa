@@ -29,6 +29,22 @@ map.createPane('settlementNames');
 map.getPane('settlementNames').style.zIndex='450';
 map.getPane('settlementNames').style.pointerEvents='none';
 let showSettlementLabels=true;
+const BASEMAP_KEY='mapa-basemap-v1';
+let basemap='dark';
+try{const stored=localStorage.getItem(BASEMAP_KEY);if(['dark','light','satellite'].includes(stored))basemap=stored}catch{}
+function updateBasemap(){
+ const light=resolvedTheme()==='light';
+ const variant=basemap==='satellite'?'satellite':basemap==='light'?'light':'dark';
+ const basemapUrl=variant==='satellite'
+  ?'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+  :'https://{s}.basemaps.cartocdn.com/'+variant+'_nolabels/{z}/{x}/{y}{r}.png';
+ tileLayer.setUrl(basemapUrl);
+ tileLayer.options.attribution=variant==='satellite'?'Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community':'© OpenStreetMap contributors · © CARTO';
+ settlementLabels.setUrl('https://{s}.basemaps.cartocdn.com/'+(variant==='satellite'?'dark':variant)+'_only_labels/{z}/{x}/{y}{r}.png');
+ if(oblastOutline)oblastOutline.setStyle({color:variant==='satellite'?'#ffffff':light?'#405b76':'#d9e5f3'});
+ const select=$('basemap-select');if(select)select.value=basemap;
+}
+
 const settlementLabels=L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png',{
  pane:'settlementNames',attribution:'© OpenStreetMap contributors · © CARTO',maxZoom:18
 });
@@ -459,9 +475,7 @@ function applyTheme(){
  const light=resolvedTheme()==='light';
  document.documentElement.dataset.theme=light?'light':'dark';
  document.querySelector('meta[name="theme-color"]').content=light?'#f4f6fa':'#15181f';
- tileLayer.setUrl('https://{s}.basemaps.cartocdn.com/'+(light?'light_nolabels':'dark_nolabels')+'/{z}/{x}/{y}{r}.png');
- settlementLabels.setUrl('https://{s}.basemaps.cartocdn.com/'+(light?'light_only_labels':'dark_only_labels')+'/{z}/{x}/{y}{r}.png');
- if(oblastOutline)oblastOutline.setStyle({color:light?'#405b76':'#d9e5f3'});
+ updateBasemap();
  recolor();
 }
 function renderPlaces(){
@@ -546,6 +560,12 @@ function initEvents(){
    $('threat-toggle').classList.toggle('on',state.showThreats);
    $('threat-toggle').setAttribute('aria-pressed',String(state.showThreats));
    refreshThreatMarkers();
+ };
+ $('basemap-select').onchange=event=>{
+   if(!['dark','light','satellite'].includes(event.target.value))return;
+   basemap=event.target.value;
+   try{localStorage.setItem(BASEMAP_KEY,basemap)}catch{}
+   updateBasemap();
  };
  $('settlement-labels-toggle').onclick=()=>{
    showSettlementLabels=!showSettlementLabels;
