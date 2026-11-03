@@ -22,9 +22,43 @@ const regionCache=new Map();
 const boundaryPending={};
 const map=L.map('map',{zoomControl:false,attributionControl:true,preferCanvas:true,minZoom:3,maxZoom:12,zoomSnap:.25}).setView([48.65,31.45],6);
 L.control.zoom({position:'bottomright'}).addTo(map);
-const tileLayer=L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
+const tileLayer=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{
   attribution:'© OpenStreetMap contributors · © CARTO',maxZoom:18
 });
+map.createPane('settlementNames');
+map.getPane('settlementNames').style.zIndex='450';
+map.getPane('settlementNames').style.pointerEvents='none';
+const BASEMAP_KEY='mapa-basemap-v1';
+let basemap='dark';
+try{const stored=localStorage.getItem(BASEMAP_KEY);if(['dark','light','satellite'].includes(stored))basemap=stored}catch{}
+function updateBasemap(){
+ const light=resolvedTheme()==='light';
+ const variant=basemap==='satellite'?'satellite':basemap==='light'?'light':'dark';
+ const basemapUrl=variant==='satellite'
+  ?'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+  :'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+ tileLayer.setUrl(basemapUrl);
+ tileLayer.options.attribution=variant==='satellite'?'Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community':'© OpenStreetMap contributors';
+ tileLayer.getContainer()?.classList.toggle('map-tiles-dark',variant==='dark');
+ // Standard OSM tiles include settlement labels. Do not overlay duplicate raster labels.
+ if(map.hasLayer(settlementLabels))map.removeLayer(settlementLabels);
+ if(oblastOutline)oblastOutline.setStyle({color:variant==='satellite'?'#ffffff':light?'#405b76':'#d9e5f3'});
+ const select=$('basemap-select');if(select)select.value=basemap;
+}
+
+// No separate labels tiles: settlement names are included in the OSM base map.
+const settlementLabels=L.layerGroup(); // Compatibility placeholder; OSM base includes place labels.
+tileLayer.on('add',()=>tileLayer.getContainer()?.classList.toggle('map-tiles-dark',basemap==='dark'));
+let oblastOutline=null;
+let selectedOutline=null;
+function clearSelectedOutline(){if(selectedOutline){map.removeLayer(selectedOutline);selectedOutline=null}}
+function highlightRegion(region){
+ clearSelectedOutline();
+ const collection=state.geo[region.type];
+ const feature=collection?.features.find(f=>regionKey(regionFromFeature(f,region.type))===regionKey(region));
+ if(!feature)return;
+ selectedOutline=L.geoJSON(feature,{interactive:false,style:{color:'#ffffff',weight:3.5,opacity:1,fill:false,dashArray:'8 4'}}).addTo(map);
+}
 const threatLayer=L.layerGroup().addTo(map);
 const nameLayer=L.layerGroup().addTo(map);
 const noticeLayer=L.layerGroup().addTo(map);
@@ -126,9 +160,21 @@ async function switchMode(mode,first=false){
    const target=await loadBoundaries(mode);
    if(request!==state.modeRequest)return;
    state.mode=mode;
+   clearSelectedOutline();
    if(state.ready||!state.stale)show('map-error',false);
    for(const m of ['oblast','raion']){const layer=state.layers[m];if(layer&&map.hasLayer(layer))map.removeLayer(layer)}
    target.addTo(map);target.bringToFront();
+   if(oblastOutline&&map.hasLayer(oblastOutline))map.removeLayer(oblastOutline);
+   if(mode==='raion'){
+     try{
+       await loadBoundaries('oblast');
+       if(request!==state.modeRequest)return;
+       oblastOutline=L.geoJSON(state.geo.oblast,{
+         interactive:false,
+         style:{color:resolvedTheme()==='light'?'#405b76':'#d9e5f3',weight:2.3,opacity:.95,fill:false}
+       }).addTo(map);
+     }catch(err){console.warn('Oblast outlines unavailable; keeping district layer',err)}
+   }
    $('map-status').textContent=(mode==='oblast'?'25 областей':'136 районів')+' · межі завантажено';
    recolor();
    if(first)fitUkraine();
@@ -156,6 +202,7 @@ function refreshLabels(){
    const info=regionData(region);
    const screen=map.latLngToContainerPoint(point),height=info.startedAt?32:20;
    const box={x:screen.x-width/2,y:screen.y+17,w:width,h:height};
+   if(small&&(box.x<8||box.x+box.w>map.getSize().x-8||box.y<105||box.y+box.h>map.getSize().y-145))return;
    if(placed.some(b=>box.x<b.x+b.w&&box.x+box.w>b.x&&box.y<b.y+b.h&&box.y+box.h>b.y))return;
    placed.push(box);
    const short=region.name.replace(/ область$/,'').replace(/ район$/,'').replace(/^Автономна Республіка /,'');
@@ -193,7 +240,7 @@ function refreshThreatMarkers(){
  }
  for(const {region,point} of entries){
   if(!map.getBounds().pad(.15).contains(point))continue;
-  const info=regionData(region),symbols=visibleThreatSymbols(info.alerts,state.hiddenSymbols);
+  const info=regionData(region),symbols=visibleThreatSymbols(info.alerts,state.hiddenSymbols).filter(symbol=>symbol!=='air');
   if(!symbols.length)continue;
   const labels=symbols.map(name=>SYMBOL_LABELS[name]).join(' · ');
   const marker=L.marker(point,{title:region.name+': '+labels,alt:region.name+': '+labels,zIndexOffset:260,icon:L.divIcon({
@@ -233,7 +280,7 @@ function renderDetail(){
  $('place-name').value=draft;
  if(typing){$('place-name').focus();$('place-name').setSelectionRange(caret,caret)}
  show('details',true);
- $('details-close').onclick=()=>{state.selected=null;show('details',false)};
+ $('details-close').onclick=()=>{state.selected=null;clearSelectedOutline();show('details',false)};
  $('details-star').onclick=()=>{favorites.has(key)?favorites.delete(key):favorites.add(key);saveFavorites();renderDetail();renderPanel();toast(favorites.has(key)?'Регіон додано в обране':'Регіон прибрано з обраного')};
  $('details-panel').onclick=()=>openDrawer('alerts');
  $('place-form').onsubmit=event=>{
@@ -247,6 +294,7 @@ function renderDetail(){
 }
 function openRegion(region){
  state.selected=region;
+ highlightRegion(region);
  renderDetail();
  closeDrawer();
 }
@@ -428,7 +476,7 @@ function applyTheme(){
  const light=resolvedTheme()==='light';
  document.documentElement.dataset.theme=light?'light':'dark';
  document.querySelector('meta[name="theme-color"]').content=light?'#f4f6fa':'#15181f';
- tileLayer.setUrl('https://{s}.basemaps.cartocdn.com/'+(light?'light_all':'dark_all')+'/{z}/{x}/{y}{r}.png');
+ updateBasemap();
  recolor();
 }
 function renderPlaces(){
@@ -514,12 +562,31 @@ function initEvents(){
    $('threat-toggle').setAttribute('aria-pressed',String(state.showThreats));
    refreshThreatMarkers();
  };
+ $('basemap-select').onchange=event=>{
+   if(!['dark','light','satellite'].includes(event.target.value))return;
+   basemap=event.target.value;
+   try{localStorage.setItem(BASEMAP_KEY,basemap)}catch{}
+   updateBasemap();
+ };
+ $('map-fullscreen').onclick=async()=>{
+   try{
+     if(document.fullscreenElement)await document.exitFullscreen();
+     else if(document.documentElement.requestFullscreen)await document.documentElement.requestFullscreen();
+     else toast('Повний екран недоступний у цьому браузері');
+   }catch{toast('Браузер не дозволяє повноекранний режим')}
+ };
+ document.addEventListener('fullscreenchange',()=>{
+   const on=!!document.fullscreenElement;
+   $('map-fullscreen').setAttribute('aria-pressed',String(on));
+   $('map-fullscreen').title=on?'Вийти з повного екрана':'Повний екран';
+   setTimeout(()=>map.invalidateSize(),100);
+ });
  $('tiles-toggle').onclick=()=>{
    state.tiles=!state.tiles;
    $('tiles-toggle').classList.toggle('on',state.tiles);
    $('tiles-toggle').setAttribute('aria-pressed',String(state.tiles));
-   if(state.tiles){tileLayer.addTo(map);tileLayer.bringToBack()}
-   else map.removeLayer(tileLayer);
+   if(state.tiles){tileLayer.addTo(map);tileLayer.bringToBack();}
+   else {map.removeLayer(tileLayer);map.removeLayer(settlementLabels)}
  };
  $('shahed-list').onclick=e=>{const b=e.target.closest('[data-id]');if(!b)return;closeDrawer();shahed.focus(b.dataset.id)};
  $('map-feed').onclick=()=>openDrawer('shaheds');
@@ -529,9 +596,10 @@ function initEvents(){
    $('shahed-toggle').setAttribute('aria-pressed',String(state.showShaheds));
    shahed.setVisible(state.showShaheds);
  };
- if(state.tiles){tileLayer.addTo(map);tileLayer.bringToBack();$('tiles-toggle').classList.add('on');$('tiles-toggle').setAttribute('aria-pressed','true')}
+ if(state.tiles){tileLayer.addTo(map);tileLayer.bringToBack();;$('tiles-toggle').classList.add('on');$('tiles-toggle').setAttribute('aria-pressed','true')}
  $('notice-toggle').onclick=()=>{state.showNotices=!state.showNotices;$('notice-toggle').setAttribute('aria-pressed',String(state.showNotices));$('notice-toggle').classList.toggle('on',state.showNotices);refreshNotices()};
  $('refresh').onclick=()=>{fetchAlerts();fetchNotices()};
+ $('map-find').onclick=()=>openDrawer('regions');
  $('map-home').onclick=()=>{state.selected=null;show('details',false);fitUkraine()};
  $('map-locate').onclick=()=>map.locate({setView:true,maxZoom:9,enableHighAccuracy:false});
  map.on('locationerror',()=>toast('Не вдалося визначити місцеположення. Перевірте дозвіл браузера.'));
