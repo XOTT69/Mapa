@@ -40,6 +40,11 @@ html[data-theme=light] .region-card.red{border-left-color:#c45465}html[data-them
 .map-actions #map-find{border-color:#7c9b5e;color:#d4edbb}
 html[data-theme=light] .map-actions #map-find{color:#405e29}
 @media(max-width:700px){.map-zone-label{max-width:84px;overflow:hidden;text-overflow:ellipsis}}
+.basemap-picker{display:flex;align-items:center;gap:7px;font-size:11px;color:#c4ccd7;white-space:nowrap;padding:0 8px}
+.basemap-picker select{background:#252b35;color:#fff;border:1px solid #586473;border-radius:7px;padding:8px 6px;font:inherit;min-height:35px}
+html[data-theme=light] .basemap-picker{color:#344459}
+html[data-theme=light] .basemap-picker select{background:#fff;color:#344459;border-color:#bac8d8}
+@media(max-width:700px){.basemap-picker{padding:0 2px}.basemap-picker span{display:none}.basemap-picker select{max-width:104px}}
 .map-actions #map-fullscreen{border-color:#7c9b5e}
 @media(max-width:700px){.map-actions button{height:38px;min-width:38px;width:38px}}
 .chip-badge{font-size:10px;font-weight:700;color:#ff8c8c;margin-left:4px}.toolbar-chip.on .chip-badge{color:inherit}
