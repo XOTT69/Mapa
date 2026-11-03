@@ -1,4 +1,4 @@
-const CACHE='mapa-atlas-v20';
+const CACHE='mapa-atlas-v21';
 const CORE=['/','/index.html','/app.js','/user-features.js','/map-icons.js','/threats-layer.js','/vendor/leaflet/leaflet.js','/vendor/leaflet/leaflet.css','/alert-logic.js','/regions.js','/styles.css','/manifest.webmanifest','/icon.svg','/icon-192.png','/icon-512.png','/apple-touch-icon.png','/ukraine-oblasts.geojson','/ukraine-raions.geojson'];
 const BORDERS=new Set(['/ukraine-oblasts.geojson','/ukraine-raions.geojson']);
 self.addEventListener('install',event=>{
