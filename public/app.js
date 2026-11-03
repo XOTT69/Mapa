@@ -28,7 +28,6 @@ const tileLayer=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{
 map.createPane('settlementNames');
 map.getPane('settlementNames').style.zIndex='450';
 map.getPane('settlementNames').style.pointerEvents='none';
-let showSettlementLabels=true;
 const BASEMAP_KEY='mapa-basemap-v1';
 let basemap='dark';
 try{const stored=localStorage.getItem(BASEMAP_KEY);if(['dark','light','satellite'].includes(stored))basemap=stored}catch{}
@@ -48,7 +47,8 @@ function updateBasemap(){
 }
 
 // No separate labels tiles: settlement names are included in the OSM base map.
-const settlementLabels=L.layerGroup();
+const settlementLabels=L.layerGroup(); // Compatibility placeholder; OSM base includes place labels.
+tileLayer.on('add',()=>tileLayer.getContainer()?.classList.toggle('map-tiles-dark',basemap==='dark'));
 let oblastOutline=null;
 let selectedOutline=null;
 function clearSelectedOutline(){if(selectedOutline){map.removeLayer(selectedOutline);selectedOutline=null}}
@@ -568,13 +568,6 @@ function initEvents(){
    try{localStorage.setItem(BASEMAP_KEY,basemap)}catch{}
    updateBasemap();
  };
- $('settlement-labels-toggle').onclick=()=>{
-   showSettlementLabels=!showSettlementLabels;
-   $('settlement-labels-toggle').classList.toggle('on',showSettlementLabels);
-   $('settlement-labels-toggle').setAttribute('aria-pressed',String(showSettlementLabels));
-   if(showSettlementLabels&&state.tiles&&false)settlementLabels.addTo(map);
-   else map.removeLayer(settlementLabels);
- };
  $('map-fullscreen').onclick=async()=>{
    try{
      if(document.fullscreenElement)await document.exitFullscreen();
@@ -592,7 +585,7 @@ function initEvents(){
    state.tiles=!state.tiles;
    $('tiles-toggle').classList.toggle('on',state.tiles);
    $('tiles-toggle').setAttribute('aria-pressed',String(state.tiles));
-   if(state.tiles){tileLayer.addTo(map);tileLayer.bringToBack();if(showSettlementLabels&&false)settlementLabels.addTo(map)}
+   if(state.tiles){tileLayer.addTo(map);tileLayer.bringToBack();}
    else {map.removeLayer(tileLayer);map.removeLayer(settlementLabels)}
  };
  $('shahed-list').onclick=e=>{const b=e.target.closest('[data-id]');if(!b)return;closeDrawer();shahed.focus(b.dataset.id)};
@@ -603,7 +596,7 @@ function initEvents(){
    $('shahed-toggle').setAttribute('aria-pressed',String(state.showShaheds));
    shahed.setVisible(state.showShaheds);
  };
- if(state.tiles){tileLayer.addTo(map);tileLayer.bringToBack();if(showSettlementLabels&&false)settlementLabels.addTo(map);$('tiles-toggle').classList.add('on');$('tiles-toggle').setAttribute('aria-pressed','true')}
+ if(state.tiles){tileLayer.addTo(map);tileLayer.bringToBack();;$('tiles-toggle').classList.add('on');$('tiles-toggle').setAttribute('aria-pressed','true')}
  $('notice-toggle').onclick=()=>{state.showNotices=!state.showNotices;$('notice-toggle').setAttribute('aria-pressed',String(state.showNotices));$('notice-toggle').classList.toggle('on',state.showNotices);refreshNotices()};
  $('refresh').onclick=()=>{fetchAlerts();fetchNotices()};
  $('map-find').onclick=()=>openDrawer('regions');
